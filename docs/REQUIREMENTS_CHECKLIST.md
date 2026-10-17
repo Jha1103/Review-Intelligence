@@ -1,0 +1,28 @@
+# Milestone 5 — Requirements Checklist (A–L) (n8n-first)
+
+Status key: `Planned` / `Implemented` / `Verified`. All items start as `Planned`.
+
+| ID | Requirement | How it is satisfied (n8n-first) | Verification | Status |
+|----|-------------|---------------------------------|--------------|--------|
+| A | Collect genuine public reviews within a configurable recent 8–12-week window. Preserve original review IDs, dates, ratings, source references, and review text. | `src/collect_reviews.py` uses `google-play-scraper` for Groww (`com.nextbillion.groww`, `in`, `en`) with a configurable `WEEKS_BACK` window (default 12). Preserves `reviewId`, `at`→`review_date`, `score`→`rating`, `content`→`review_text`, source URL/provenance. | Unit test asserts all five fields present and non-null for every row; window bounds checked against `review_date`. | Planned |
+| B | Deduplicate, clean, document exclusions, and preserve evidence. | `src/clean_reviews.py` deduplicates by `reviewId`, drops empty/invalid reviews, redacts PII, writes `data_quality_report.json` with counts and exclusion reasons (no PII in log). | Deterministic test: no duplicate `reviewId` in `cleaned_reviews.csv`; quality report has fetched/date-filtered/duplicate/excluded/cleaned counts. | Planned |
+| C | Discover max 5 themes. Rank top 3 using programmatically calculated frequencies. Extract exactly 3 verbatim quotes with real review IDs. | n8n + Gemini discovers ≤5 themes; n8n Code nodes compute frequencies with JavaScript; top-3 ranked; exactly 3 verbatim quotes each bound to a real `reviewId`. Python + Pandas are for local data processing only. | Assert ≤5 themes; top-3 order matches computed frequency; each quote string appears verbatim in a review row and quote→reviewId mapping resolves. | Planned |
+| D | Identify a recurring fee issue supported by multiple actual reviews. Never invent. If none, stop and request manual review. | n8n + Gemini detects fee issue only when ≥2 cleaned reviews support it. Otherwise workflow stops and requests manual review; no fee facts emitted. | Test with fee-free data → branch stops. Test with multi-review fee evidence → proceeds. | Planned |
+| E | Structured weekly product pulse: top themes, 3 quotes, key observation, exactly 3 suggested product actions, max 250 words. | n8n + Gemini assembles pulse; n8n Code nodes count words (≤250) and assert exactly 3 actions. | Word-count test ≤250; assert exactly 3 "Action:" items; assert 3 quotes present. | Planned |
+| F | Fee explanation from detected issue: max 6 neutral factual bullets, 2 real official product URLs, Last checked: [verified date]. No invented facts/URLs. | n8n + Gemini derives bullets only from detected reviews; URLs from verified official sources (pricing, support); `Last checked:` set to actual verification date. URLs are not required before fee issue is identified. | Assert ≤6 bullets; both URLs match official sources; `Last checked:` present and parseable as a date. | Planned |
+| G | Validate output formats, source references, quote accuracy, issue evidence, PII handling, and word limits using deterministic checks. | n8n Code nodes run all checks; local `tests/` validate dates, dedup, content preservation, PII redaction. | `pytest tests/` passes on clean sample; fails on injected violations (duplicate quote, missing URL, PII present, >250 words). | Planned |
+| H | Display both outputs before allowing an explicit Approve/Reject decision. | n8n Cloud form displays both complete outputs (pulse + fee explainer); user makes explicit Approve/Reject. No local CLI approval in final workflow. | n8n form configured; workflow has no MCP path without approval. | Planned |
+| I | After approval only, use a real n8n MCP Client Tool to invoke MCP Server Trigger tools named `append_to_doc` and `create_email_draft`. | n8n Cloud workflow uses MCP Client Tool to call those two named MCP Server Trigger tools, gated on approval state. | n8n workflow export inspected; no unapproved MCP call path; no "send" email node. | Planned |
+| J | After approval only: append structured dated entry to existing Google Doc; create Gmail draft with both outputs; never send. | `append_to_doc` writes runId, date, pulse + fee summary to the doc; `create_email_draft` creates draft only. | n8n run history shows draft created, no sent email; doc entry contains runId and date. | Planned |
+| K | Prevent unapproved actions and reduce duplicate writes with persisted run ID, approval state, and action status. | n8n Data Tables or Google Sheets persists runId, `approvalState`, per-action `status`; n8n refuses unless approved and action is `not_run`; retry + dedup handling. | Test: re-running approved flow skips `done` actions; rejected run performs no MCP calls. | Planned |
+| L | Produce README, source list (4–6 URLs), sample reviews CSV, Markdown pulse, fee explainer, workflow exports, screenshots, 3-minute demo script. | Shipped: `README.md`, `sources.md` (4–6 official URLs), `data/reviews_sample.csv`, `outputs/pulse.md`, `outputs/fee_explainer.md`, `n8n/review-pulse-workflow.json`, `screenshots/`, `demo_script.md`. | File-existence test; `sources.md` has 4–6 URLs; demo script ≤3 minutes read-through. | Planned |
+
+### Deliverables inventory
+- `README.md`
+- `sources.md` — 4–6 official source URLs
+- `data/reviews_sample.csv` — sanitized sample (no PII)
+- `outputs/pulse.md` — example weekly pulse
+- `outputs/fee_explainer.md` — example fee explainer
+- `n8n/review-pulse-workflow.json` — exported n8n Cloud workflow
+- `screenshots/` — captured during demo (placeholders until demo run)
+- `demo_script.md` — 3-minute demo script

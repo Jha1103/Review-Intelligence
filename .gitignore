@@ -1,0 +1,33 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+.env
+.venv/
+env/
+venv/
+
+# Private raw data and operational state (never commit)
+data/raw_reviews.csv
+data/cleaned_reviews.csv
+data/data_quality_report.json
+data/exclusions.log
+state/
+
+# Test caches
+.pytest_cache/
+
+# Credentials / local config overrides
+.env
+config/config.local.json
+config/*.secret.json
+
+# OS
+.DS_Store
+
+# Sanitized sample IS committable: data/reviews_sample.csv (not ignored)
+# Final Markdown reports ARE committable: outputs/pulse.md, outputs/fee_explainer.md (not ignored)
+# Reviewed n8n workflow exports ARE committable: n8n/*.json (not ignored)
+# Screenshots ARE committable: screenshots/* (not ignored)

@@ -1,0 +1,7 @@
+# Milestone 5 — allowed dependencies only
+# Python 3, pandas, google-play-scraper
+# Add exact pins after you confirm the product and environment.
+pandas>=2.2.0
+google-play-scraper>=1.2.0
+pytest>=8.0.0
+python-dotenv>=1.0.0

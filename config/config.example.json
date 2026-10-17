@@ -1,0 +1,43 @@
+{
+  "product": "Groww",
+  "googlePlay": {
+    "appId": "com.nextbillion.groww",
+    "lang": "en",
+    "country": "in",
+    "weeksBack": 12,
+    "sort": "most_recent"
+  },
+  "googleSheets": {
+    "spreadsheetId": "INSERT_EXISTING_SPREADSHEET_ID_AT_INTEGRATION",
+    "worksheet": "cleaned_reviews"
+  },
+  "gemini": {
+    "model": "INSERT_SUPPORTED_GEMINI_MODEL_TO_VERIFY",
+    "maxThemes": 5,
+    "topThemes": 3,
+    "verbatimQuotes": 3
+  },
+  "outputs": {
+    "pulseMaxWords": 250,
+    "feeMaxBullets": 6,
+    "feeOfficialUrls": 2,
+    "pulseActions": 3,
+    "officialPricingUrl": "https://groww.in/pricing",
+    "officialSupportUrl": "https://groww.in/help/stocks"
+  },
+  "n8n": {
+    "cloudUrl": "INSERT_N8N_CLOUD_URL_AT_INTEGRATION",
+    "mcpServerTriggerTools": ["append_to_doc", "create_email_draft"],
+    "gmailDraftOnly": true,
+    "neverSendEmail": true
+  },
+  "persistence": {
+    "store": "n8n_data_tables_or_google_sheets",
+    "purpose": "run IDs, approval decisions, payload hashes, action status"
+  },
+  "directories": {
+    "dataDir": "data",
+    "outputsDir": "outputs",
+    "stateDir": "state"
+  }
+}
