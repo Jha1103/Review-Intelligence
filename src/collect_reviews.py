@@ -290,12 +290,18 @@ def collect_reviews(
 
 
 def _rating_distribution(rows: list[dict[str, Any]]) -> dict[str, int]:
-    """Count reviews per star rating (1-5)."""
+    """Count reviews per star rating (1-5).
+
+    Handles both integer and string rating representations consistently.
+    """
     dist = {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
     for row in rows:
         r = row.get("rating")
-        if r in dist:
-            dist[r] += 1
+        if r is None or r == "":
+            continue
+        key = str(int(float(r))) if str(r).strip() else ""
+        if key in dist:
+            dist[key] += 1
     return dist
 
 

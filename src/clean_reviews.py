@@ -38,6 +38,7 @@ from config import (  # noqa: E402
     LANG,
     RAW_COLUMNS,
     RAW_REVIEWS_CSV,
+    REVIEWS_FOR_SHEETS_CSV,
     REVIEWS_SAMPLE_CSV,
     SAMPLE_SIZE,
     SOURCE_NAME,
@@ -114,6 +115,7 @@ def clean_reviews(
     window_start: datetime | None = None,
     cleaned_path: str = CLEANED_REVIEWS_CSV,
     sample_path: str = REVIEWS_SAMPLE_CSV,
+    sheets_path: str = REVIEWS_FOR_SHEETS_CSV,
     report_path: str = DATA_QUALITY_REPORT_JSON,
     exclusion_path: str | None = None,
 ) -> dict[str, Any]:
@@ -159,27 +161,29 @@ def clean_reviews(
 
     # --- Date window filter ---
     in_window: list[dict[str, Any]] = []
-    out_of_window = 0
-    invalid_dates = 0
+    out_of_window_removed = 0
+    invalid_date_removed = 0
     for row in deduped:
         rd = _parse_date(row.get("review_date"))
         if rd is None:
-            invalid_dates += 1
+            invalid_date_removed += 1
             continue
         if rd < window_start:
-            out_of_window += 1
+            out_of_window_removed += 1
             continue
         in_window.append(row)
 
     logger.info(
         "Date filter: %d in window, %d out of window, %d invalid dates",
-        len(in_window), out_of_window, invalid_dates,
+        len(in_window), out_of_window_removed, invalid_date_removed,
     )
 
     # --- Clean each review ---
     cleaned_rows: list[dict[str, Any]] = []
     empty_removed = 0
     invalid_rating_removed = 0
+    invalid_date_removed = 0
+    out_of_window_removed = 0
     pii_redacted_count = 0
     exclusion_log: list[dict[str, str]] = []
 
@@ -216,6 +220,9 @@ def clean_reviews(
         if was_redacted:
             pii_redacted_count += 1
 
+        # Quote eligibility: original text is PII-free and non-empty
+        quote_eligible = not was_redacted and len(raw_text.strip()) > 0
+
         cleaned_rows.append(
             {
                 "review_id": rid,
@@ -229,12 +236,13 @@ def clean_reviews(
                 "app_version": row.get("app_version", ""),
                 "pii_redacted": "yes" if was_redacted else "no",
                 "exclusion_reason": "",  # not excluded
+                "quote_eligible": "yes" if quote_eligible else "no",
             }
         )
 
     logger.info(
-        "Cleaning complete: %d cleaned reviews, %d empty removed, %d invalid rating removed, %d PII redacted",
-        len(cleaned_rows), empty_removed, invalid_rating_removed, pii_redacted_count,
+        "Cleaning complete: %d cleaned reviews, %d empty removed, %d invalid rating removed, %d invalid date removed, %d out of window removed, %d PII redacted",
+        len(cleaned_rows), empty_removed, invalid_rating_removed, invalid_date_removed, out_of_window_removed, pii_redacted_count,
     )
 
     # --- Write cleaned CSV ---
@@ -245,6 +253,30 @@ def clean_reviews(
         for row in cleaned_rows:
             writer.writerow(row)
     logger.info("Wrote %d cleaned reviews to %s", len(cleaned_rows), cleaned_path)
+
+    # --- Write privacy-safe Sheets export (no original_review_text) ---
+    sheets_columns = [
+        "review_id",
+        "review_date",
+        "rating",
+        "cleaned_review_text",
+        "source",
+        "source_url",
+        "collected_at",
+        "app_version",
+        "pii_redacted",
+        "quote_eligible",
+    ]
+    os.makedirs(os.path.dirname(sheets_path), exist_ok=True)
+    with open(sheets_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=sheets_columns, extrasaction="ignore")
+        writer.writeheader()
+        for row in cleaned_rows:
+            writer.writerow({k: row.get(k, "") for k in sheets_columns})
+    logger.info(
+        "Wrote %d privacy-safe Sheets rows to %s",
+        len(cleaned_rows), sheets_path,
+    )
 
     # --- Write sanitized sample CSV (no PII, no original text with PII) ---
     sample_rows = cleaned_rows[:SAMPLE_SIZE]
@@ -269,10 +301,13 @@ def clean_reviews(
 
     # --- Rating distribution ---
     rating_dist = {"1": 0, "2": 0, "3": 0, "4": 0, "5": 0}
+    quote_eligible_count = 0
     for row in cleaned_rows:
         r = row.get("rating", "")
         if r in rating_dist:
             rating_dist[r] += 1
+        if row.get("quote_eligible") == "yes":
+            quote_eligible_count += 1
 
     # --- Date range ---
     dates = [
@@ -297,12 +332,16 @@ def clean_reviews(
                 "eligible_reviews_in_date_window", len(in_window)
             ),
             "duplicate_reviews_removed": duplicates_removed,
-            "invalid_empty_reviews_removed": empty_removed + invalid_rating_removed + invalid_dates + out_of_window,
+            "invalid_empty_reviews_removed": empty_removed,
+            "invalid_rating_reviews_removed": invalid_rating_removed,
+            "invalid_date_reviews_removed": invalid_date_removed,
+            "out_of_window_reviews_removed": out_of_window_removed,
             "final_cleaned_reviews": len(cleaned_rows),
             "earliest_eligible_review_date": earliest,
             "latest_eligible_review_date": latest,
             "rating_distribution": rating_dist,
             "reviews_requiring_pii_redaction": pii_redacted_count,
+            "quote_eligible_reviews": quote_eligible_count,
             "pagination_ended_naturally": quality_report.get(
                 "pagination_ended_naturally", True
             ),

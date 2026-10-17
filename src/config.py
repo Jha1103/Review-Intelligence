@@ -37,7 +37,10 @@ MAX_BACKOFF_SECONDS = float(os.getenv("GROWW_MAX_BACKOFF", "60.0"))
 DATA_DIR = os.getenv("GROWW_DATA_DIR", "data")
 RAW_REVIEWS_CSV = os.path.join(DATA_DIR, "raw_reviews.csv")
 CLEANED_REVIEWS_CSV = os.path.join(DATA_DIR, "cleaned_reviews.csv")
+REVIEWS_FOR_SHEETS_CSV = os.path.join(DATA_DIR, "reviews_for_sheets.csv")
 REVIEWS_SAMPLE_CSV = os.path.join(DATA_DIR, "reviews_sample.csv")
+ANALYSIS_SAMPLE_CSV = os.path.join(DATA_DIR, "analysis_sample.csv")
+SAMPLING_REPORT_JSON = os.path.join(DATA_DIR, "sampling_report.json")
 DATA_QUALITY_REPORT_JSON = os.path.join(DATA_DIR, "data_quality_report.json")
 
 # --- Sample size for the commit-safe sample CSV ---
@@ -67,4 +70,5 @@ CLEANED_COLUMNS = [
     "app_version",
     "pii_redacted",
     "exclusion_reason",
+    "quote_eligible",
 ]

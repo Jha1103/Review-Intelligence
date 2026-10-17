@@ -27,7 +27,11 @@ config/*.secret.json
 # OS
 .DS_Store
 
-# Sanitized sample IS committable: data/reviews_sample.csv (not ignored)
+# Sanitized, privacy-safe exports ARE committable:
+#   data/reviews_for_sheets.csv    (no original_review_text, PII redacted)
+#   data/reviews_sample.csv        (sanitized, 50 rows)
+#   data/analysis_sample.csv       (stratified sample, 1000 rows)
+#   data/sampling_report.json      (sampling methodology report)
 # Final Markdown reports ARE committable: outputs/pulse.md, outputs/fee_explainer.md (not ignored)
 # Reviewed n8n workflow exports ARE committable: n8n/*.json (not ignored)
 # Screenshots ARE committable: screenshots/* (not ignored)

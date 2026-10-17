@@ -77,8 +77,8 @@ review-pulse-m5/
 | Phase | Focus | Exit gate |
 |-------|-------|-----------|
 | 0 | Project setup: folder, git, planning docs, config template (Groww confirmed) | Docs reviewed |
-| 1 | **Data collection**: Python + google-play-scraper, 12-week window, pagination, retries, dedup, PII redaction, CSV exports + quality report | Pipeline runs; tests pass |
-| 2 | **Load to Google Sheets**: upload cleaned dataset; verify write/read | Sheet populated |
+| 1 | **Data collection** (COMPLETED): Python + google-play-scraper, 12-week window, pagination, retries, dedup, PII redaction, CSV exports + quality report | Pipeline runs; 29 tests pass |
+| 2 | **Load to Google Sheets**: upload `reviews_for_sheets.csv` to Google Sheets; verify write/read | Sheet populated |
 | 3 | **n8n AI intelligence**: read Sheets → Gemini theme discovery (≤5), classification, 3 verbatim quotes, fee-issue detection | Themes + quotes generated |
 | 4 | **n8n deterministic validation**: Code nodes (JavaScript) for frequencies, evidence, formatting | Validation passes |
 | 5 | **n8n output generation**: pulse (≤250 words) + fee explainer (≤6 bullets, 2 official URLs, Last checked) | Outputs generated |
@@ -104,7 +104,12 @@ review-pulse-m5/
 - The Gemini model used must be verified as supported before implementation.
 - Product is confirmed as Groww; no further product confirmation needed.
 
-### 8. What is needed to start Phase 1
-- Confirmation that the corrected planning documents (this set) are approved.
-- The user will supply n8n Cloud access and Gemini API key at integration time (not now).
-- No scraping or external API calls will be made until Phase 1 is explicitly approved to run.
+### 8. What is needed to start Phase 2
+- n8n Cloud instance URL and credentials.
+- Gemini API key (supplied by user, never committed).
+- Google Sheets connection details for storing cleaned data.
+- Target existing Google Doc ID and Gmail draft destination (integration phase).
+- Confirmation of supported Gemini model before implementation.
+- n8n Data Tables or Google Sheets choice for persistence store.
+
+Phase 1 is complete: data collection pipeline implemented, tested, and producing privacy-safe exports ready for n8n + Gemini.
