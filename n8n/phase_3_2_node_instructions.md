@@ -1,187 +1,292 @@
-# Phase 3.2 — n8n Node-by-Node Instructions (Self-Hosted CE 2.43.7)
+# Phase 3.2 — Extending the Existing n8n CE 2.43.7 Workflow
 
-This document provides precise instructions for extending the existing n8n
-workflow with scalable, auditable classification for the 1,000-review sample.
+**Existing working workflow (DO NOT OVERWRITE):**
 
-**Prerequisite:** The existing workflow ends at "Validate AI Pilot Results"
-after a successful 25-review pilot. Phase 3.2 extends AFTER "Validate Review
-Dataset" succeeds, using ALL 1,000 Google Sheets review records.
+```
+Manual Trigger → Get row(s) in sheet → Validate Review Dataset → Prepare AI Pilot → Google Gemini Message a Model → Validate AI Pilot Results
+```
 
-**Important:** Do not overwrite the existing workflow. Add these nodes as an
-extension branch. Do not change credentials. Do not call Gemini until you
-approve the 100-review test.
-
----
-
-## Overview of New Nodes
-
-| # | Node Name | Type | Purpose |
-|---|-----------|------|---------|
-| 1 | Generate Classification Batches | Code (JavaScript) | Splits 1,000 reviews into batches of 25 (max 4 batches = 100 reviews for initial test) |
-| 2 | Gemini Classify Batch | Google Gemini | Calls Gemini with classification prompt for each batch |
-| 3 | Validate Batch Classification | Code (JavaScript) | Deterministic validation of Gemini results per batch |
-| 4 | Store Batch Results | Code (JavaScript) | Stores validated results with batch metadata for audit/resume |
-| 5 | Aggregate Classification Results | Code (JavaScript) | Aggregates theme frequencies across all batches |
-| 6 | Check More Batches | IF | Routes to process more batches or proceed to aggregation |
+**Verified facts from live executions:**
+- Google Sheets Get Row(s) outputs 1,000 individual items
+- Validate Review Dataset outputs ONE summary item (not 1,000 reviews)
+- Prepare AI Pilot reads original records using `$("Get row(s) in sheet").all()`
+- Gemini successfully processed 25 reviews via `content.parts[0].text`
+- The pilot validator parsed `content.parts[0].text` and checked 25 review IDs
+- Google Gemini credentials already configured
+- Worksheet: `analysis_sample`
+- Model: whichever you selected in the existing live node (DO NOT change)
 
 ---
 
-## Node 1 — Generate Classification Batches (Code)
+## Extension Point
+
+Add Phase 3.2 as a branch that runs **AFTER** "Validate Review Dataset" succeeds.
+The new branch reads the 1,000 reviews from the Google Sheets node (not from
+Validate Review Dataset's summary output), selects 100 deterministically, and
+processes them in 4 batches of 25 through Gemini.
+
+**Do not modify or replace any existing nodes.** Add new nodes only.
+
+---
+
+## New Node 1 — Assert Validation Passed (Code)
 
 **Type:** Code (JavaScript)  
 **Position:** After "Validate Review Dataset"  
-**Input:** 1 item containing all 1,000 reviews from Google Sheets
+**Operation:** Run once for all items
+
+### Purpose
+Gate the batch generation on successful validation. Assert that
+`validation_passed === true` before proceeding.
+
+### JavaScript Code
+
+```javascript
+// Phase 3.2 — Gate: Assert Validation Passed
+// Input: 1 item from Validate Review Dataset (summary only)
+// Output: Passes through to batch generation if validation passed
+
+const validation = $input.first().json;
+
+if (!validation || validation.validation_passed !== true) {
+  throw new Error(
+    "Phase 3.2 blocked: Validate Review Dataset did not pass. " +
+    "validation_passed = " + (validation ? validation.validation_passed : "undefined")
+  );
+}
+
+// Pass through a minimal payload; the batch generator reads the 1,000 reviews
+// directly from the Google Sheets node.
+return [{
+  json: {
+    validation_passed: true,
+    validated_at: validation.validated_at || new Date().toISOString(),
+    proceed_to_batch_generation: true,
+  },
+}];
+```
+
+### Parameters
+- **Operation:** Run once for all items
+
+---
+
+## New Node 2 — Generate Classification Batches (Code)
+
+**Type:** Code (JavaScript)  
+**Position:** After "Assert Validation Passed"  
+**Operation:** Run once for all items
+
+### Purpose
+Read all 1,000 review records from the Google Sheets node using
+`$("Get row(s) in sheet").all()`, select 100 deterministically (seed=42),
+and split into 4 batches of 25.
 
 ### JavaScript Code
 
 ```javascript
 // Phase 3.2 — Generate Classification Batches
-// Input: 1 item with all reviews from Validate Review Dataset
-// Output: N items (one per batch), max 4 batches for initial test (100 reviews)
+// Input: 1 item (validation gate output)
+// Output: 4 items (one per batch of 25 reviews)
 
+// --- Configuration ---
 const BATCH_SIZE = 25;
-const MAX_BATCHES_FOR_TEST = 4; // 4 x 25 = 100 reviews
-const RUN_ID = `run_${Date.now()}`;
+const MAX_BATCHES = 4;           // 4 x 25 = 100 reviews
+const TOTAL_REVIEWS = 1000;
+const SELECTED_COUNT = 100;
+const SEED = 42;                 // Documented: deterministic selection seed
+const SELECTION_METHOD = "systematic_step_10_seed_42";
 
-// Get the reviews array from input
-// The input item may have reviews in different fields depending on upstream node
-let reviews = [];
-const inputJson = $input.first().json;
-
-// Try to find reviews array in common locations
-if (inputJson.reviews) {
-  reviews = inputJson.reviews;
-} else if (inputJson.data && inputJson.data.reviews) {
-  reviews = inputJson.data.reviews;
-} else if (Array.isArray(inputJson)) {
-  reviews = inputJson;
-} else {
-  // If input is a single item with review fields directly
-  reviews = [inputJson];
+// --- Gate check ---
+if ($input.first().json.proceed_to_batch_generation !== true) {
+  throw new Error("Phase 3.2 blocked: validation gate did not pass");
 }
 
-// Sort by review_id for deterministic ordering
-reviews.sort((a, b) => (a.review_id || "").localeCompare(b.review_id || ""));
+// --- Read all 1,000 reviews from the Google Sheets node ---
+// NOTE: Validate Review Dataset outputs only a summary item.
+// Use the Google Sheets node directly to get all individual review items.
+let allReviews = [];
+try {
+  const sheetItems = $("Get row(s) in sheet").all();
+  for (const item of sheetItems) {
+    if (item.json && item.json.review_id) {
+      allReviews.push(item.json);
+    }
+  }
+} catch (e) {
+  throw new Error(
+    "Phase 3.2: Failed to read reviews from Google Sheets node. " +
+    "Ensure the node is named exactly 'Get row(s) in sheet'. Error: " + e.message
+  );
+}
 
-// Generate batches
+if (allReviews.length !== TOTAL_REVIEWS) {
+  throw new Error(
+    `Phase 3.2: Expected ${TOTAL_REVIEWS} reviews from Google Sheets, ` +
+    `got ${allReviews.length}`
+  );
+}
+
+// --- Deterministic selection: sort by review_id, take every 10th starting at offset ---
+allReviews.sort((a, b) => String(a.review_id || "").localeCompare(String(b.review_id || "")));
+
+const offset = SEED % 10;              // 42 % 10 = 2
+const step = 10;                       // 1000 / 100 = 10
+const selected = [];
+
+for (let i = offset; i < allReviews.length && selected.length < SELECTED_COUNT; i += step) {
+  selected.push(allReviews[i]);
+}
+
+if (selected.length !== SELECTED_COUNT) {
+  throw new Error(
+    `Phase 3.2: Deterministic selection produced ${selected.length} reviews, expected ${SELECTED_COUNT}`
+  );
+}
+
+// --- Split selected 100 into 4 batches of 25 ---
 const batches = [];
-const numBatches = Math.min(
-  MAX_BATCHES_FOR_TEST,
-  Math.ceil(reviews.length / BATCH_SIZE)
-);
-
-for (let i = 0; i < numBatches; i++) {
+for (let i = 0; i < MAX_BATCHES; i++) {
   const start = i * BATCH_SIZE;
-  const end = Math.min(start + BATCH_SIZE, reviews.length);
-  const batchReviews = reviews.slice(start, end);
-  const batchId = `batch_${i + 1}_${String(Date.now()).slice(-6)}`;
+  const end = start + BATCH_SIZE;
+  const batchReviews = selected.slice(start, end);
+  const runId = `run_${SEED}`;
+  const hash = require('crypto').createHash('sha256')
+    .update(`${runId}:batch:${i + 1}`)
+    .digest('hex').slice(0, 12);
+  const batchId = `batch_${i + 1}_${hash}`;
 
   batches.push({
     batch_id: batchId,
     batch_index: i + 1,
-    run_id: RUN_ID,
+    run_id: runId,
     batch_size: BATCH_SIZE,
     review_count: batchReviews.length,
     review_ids: batchReviews.map(r => r.review_id),
     reviews: batchReviews,
+    selection_method: SELECTION_METHOD,
+    source_dataset: "analysis_sample_1000",
     status: "pending",
     created_at: new Date().toISOString(),
   });
 }
 
-// Return one item per batch
+// Return one item per batch — n8n will process each through Gemini independently
 return batches.map(b => ({ json: b }));
 ```
 
 ### Parameters
-- **Operation:** Run once for all items (not per item)
+- **Operation:** Run once for all items
 
 ---
 
-## Node 2 — Gemini Classify Batch (Google Gemini)
+## New Node 3 — Gemini Classify Batch (Google Gemini Message a Model)
 
-**Type:** Google Gemini (Chat Model)  
+**Type:** Google Gemini (Message a Model) — SAME operation as the 25-review pilot  
 **Position:** After "Generate Classification Batches"  
-**Input:** 1 item per batch (25 reviews)
+**Operation:** Chat / Message a Model (match your existing pilot node configuration)
 
 ### Configuration
-- **Model:** gemini-1.5-flash (verify supported model in your n8n instance)
+- **Model:** Use the SAME model you selected in the existing live pilot node (DO NOT change)
+- **Credential:** Reuse your existing secure Google Gemini credential (configured in n8n UI)
 - **Temperature:** 0.1 (deterministic)
 - **Max Output Tokens:** 4096
-- **API Key:** Configured in n8n credentials (do not hardcode)
 
-### System Message (from docs/GEMINI_CLASSIFICATION_PROMPT.md)
-
+### System Message
 Copy the full system instructions from `docs/GEMINI_CLASSIFICATION_PROMPT.md`.
 
-### User Message (constructed in Code node before this, or use expressions)
+### User Message (Prompt Content)
 
-The user message should contain the batch of 25 reviews as a JSON array. Use
-n8n expressions to pass the `reviews` field from the previous node.
+Use an n8n expression to pass the batch of 25 reviews as JSON:
 
-Example expression for the prompt content:
 ```
-{{ $json.reviews | JSON.stringify }}
+{{ JSON.stringify($json.reviews) }}
 ```
 
 ### Important
 - Only `cleaned_review_text` (PII-redacted) is sent to Gemini.
-- Original `original_review_text` is NEVER in the Google Sheets data (it's in
-  the private local cleaned_reviews.csv only).
+- Original `original_review_text` is NOT in the Google Sheets data — it is in
+  the gitignored local `data/cleaned_reviews.csv` only.
 - Reviews with `quote_eligible=no` are still classified but flagged.
+- The Gemini response will be in `content.parts[0].text` as a JSON string.
+- Do NOT expect the Gemini node to return `batch_id`, `review_ids`, or other
+  batch metadata — those are in the input item (`$json.batch_id`, etc.).
 
 ---
 
-## Node 3 — Validate Batch Classification (Code, JavaScript)
+## New Node 4 — Validate Batch Classification (Code)
 
 **Type:** Code (JavaScript)  
 **Position:** After "Gemini Classify Batch"  
-**Input:** 1 item (Gemini response + original batch data)
+**Operation:** Run once for each item
+
+### Purpose
+Parse `content.parts[0].text`, validate exactly 25 classifications,
+check all expected review IDs present once, validate themes/sentiments/fee topics,
+and flag questionable fee claims.
 
 ### JavaScript Code
 
 ```javascript
 // Phase 3.2 — Validate Batch Classification (JavaScript)
-// Input: Gemini classification results + original batch review IDs
-// Output: Validated results or error
+// Input: 1 item (Gemini response + original batch data)
+// Output: Validated results with errors/warnings
 
 const VALID_THEME_IDS = ["T1", "T2", "T3", "T4", "T5"];
-const VALID_SENTIMENTS = ["positive", "negative", "neutral"];
-const VALID_FEE_TOPICS = ["fee-brokerage", "fee-other", "none"];
+const VALID_SENTIMENTS = ["positive", "negative", "neutral", "unclear", "mixed"];
+const VALID_FEE_TOPICS = ["brokerage", "dp_charges", "other_fee", "unspecified_fee", "none", "unclear"];
 const MAX_THEMES_PER_REVIEW = 2;
+const EXPECTED_BATCH_SIZE = 25;
 
 const errors = [];
 const warnings = [];
 const classifiedIds = [];
 
-// Get Gemini results
+// --- Parse Gemini response from content.parts[0].text ---
 let geminiResults = [];
 try {
-  // Gemini node may return results in different formats
-  const geminiOutput = $input.first().json;
-  if (geminiOutput.classifications) {
-    geminiResults = geminiOutput.classifications;
-  } else if (geminiOutput.results) {
-    geminiResults = geminiOutput.results;
-  } else if (Array.isArray(geminiOutput)) {
-    geminiResults = geminiOutput;
-  } else if (geminiOutput.content) {
-    // Try to parse JSON from content string
-    geminiResults = JSON.parse(geminiOutput.content);
+  const rawText = $input.first().json.content?.parts?.[0]?.text || "";
+  if (!rawText) {
+    throw new Error("Missing content.parts[0].text in Gemini response");
+  }
+  const text = rawText.trim();
+  const start = text.indexOf("[");
+  const end = text.lastIndexOf("]");
+  if (start === -1 || end === -1 || end < start) {
+    throw new Error("No JSON array found in Gemini response text");
+  }
+  geminiResults = JSON.parse(text.slice(start, end + 1));
+  if (!Array.isArray(geminiResults)) {
+    throw new Error("Gemini response is not a JSON array");
   }
 } catch (e) {
   errors.push(`Failed to parse Gemini response: ${e.message}`);
-  return [{ json: { valid: false, errors, warnings, classified_ids: [] } }];
+  return [{
+    json: {
+      valid: false,
+      batch_id: $input.first().json.batch_id,
+      batch_index: $input.first().json.batch_index,
+      run_id: $input.first().json.run_id,
+      errors,
+      warnings,
+      classified_review_ids: [],
+      classified_count: 0,
+      input_count: EXPECTED_BATCH_SIZE,
+      parse_error: true,
+      validated_at: new Date().toISOString(),
+    },
+  }];
 }
 
-// Get original review IDs from the batch (from previous node)
+// --- Get expected review IDs from this batch's input ---
 const originalReviewIds = ($input.first().json.review_ids || []).map(String);
 const expectedIds = new Set(originalReviewIds);
 
-// Check record count
-if (geminiResults.length !== expectedIds.size) {
+// --- Check record count ---
+if (geminiResults.length !== EXPECTED_BATCH_SIZE) {
   errors.push(
-    `Record count mismatch: expected ${expectedIds.size} classifications, got ${geminiResults.length}`
+    `Record count mismatch: expected ${EXPECTED_BATCH_SIZE} classifications, ` +
+    `got ${geminiResults.length}`
   );
 }
 
@@ -206,7 +311,7 @@ for (let i = 0; i < geminiResults.length; i++) {
 
   classifiedIds.push(rid);
 
-  // Validate themes
+  // Validate themes (empty array allowed for unclassified)
   const themes = result.themes || [];
   if (!Array.isArray(themes)) {
     errors.push(`Review ${rid}: themes is not a list`);
@@ -214,15 +319,15 @@ for (let i = 0; i < geminiResults.length; i++) {
   }
   if (themes.length > MAX_THEMES_PER_REVIEW) {
     errors.push(
-      `Review ${rid}: ${themes.length} themes assigned, max ${MAX_THEMES_PER_REVIEW} allowed`
+      `Review ${rid}: ${themes.length} themes, max ${MAX_THEMES_PER_REVIEW} allowed`
     );
   }
   const invalidThemes = themes.filter(t => !VALID_THEME_IDS.includes(t));
   if (invalidThemes.length > 0) {
-    errors.push(`Review ${rid}: invalid theme IDs: ${JSON.stringify(invalidThemes)}`);
+    errors.push(`Review ${rid}: invalid themes ${JSON.stringify(invalidThemes)}`);
   }
 
-  // Validate sentiment
+  // Validate sentiment (includes unclear, mixed)
   const sentiment = result.sentiment || "";
   if (!VALID_SENTIMENTS.includes(sentiment)) {
     errors.push(`Review ${rid}: invalid sentiment '${sentiment}'`);
@@ -234,13 +339,19 @@ for (let i = 0; i < geminiResults.length; i++) {
     errors.push(`Review ${rid}: invalid fee topic '${feeTopic}'`);
   }
 
-  // Fee-topic consistency check
+  // Fee-topic consistency: T1 assigned ⟺ fee_topic is a specific subtype
   const isFee = themes.includes("T1");
-  const hasFeeTopic = feeTopic !== "none";
-  if (isFee !== hasFeeTopic) {
+  const hasFeeSubtype = ["brokerage", "dp_charges", "other_fee", "unspecified_fee"].includes(feeTopic);
+  if (isFee !== hasFeeSubtype) {
     warnings.push(
-      `Review ${rid}: questionable fee-subtype claim (T1=${isFee}, fee_topic=${feeTopic}), flagged for manual review`
+      `Review ${rid}: questionable fee-subtype claim (T1=${isFee}, fee_topic=${feeTopic}), ` +
+      "flagged for manual review"
     );
+  }
+
+  // Flag ambiguous classifications
+  if (result.needs_manual_review === true) {
+    warnings.push(`Review ${rid}: marked needs_manual_review by model`);
   }
 }
 
@@ -282,18 +393,22 @@ return [{
 
 ---
 
-## Node 4 — Store Batch Results (Code, JavaScript)
+## New Node 5 — Store Batch Results (Code)
 
 **Type:** Code (JavaScript)  
 **Position:** After "Validate Batch Classification"  
-**Input:** 1 item (validated batch results)
+**Operation:** Run once for each item
+
+### Purpose
+Preserve validated classifications and batch metadata. The classifications
+are needed by the aggregation node.
 
 ### JavaScript Code
 
 ```javascript
 // Phase 3.2 — Store Batch Results
-// Input: Validated batch classification results
-// Output: Stored confirmation with batch metadata
+// Input: 1 item (validated batch classification)
+// Output: Stored record with classifications preserved
 
 const validation = $input.first().json;
 
@@ -308,70 +423,58 @@ const storeRecord = {
   warning_count: validation.warnings.length,
   classified_review_ids: validation.classified_review_ids,
   missing_review_ids: validation.missing_review_ids,
+  gemini_results: validation.gemini_results,   // PRESERVED for aggregation
+  validation: validation,                        // Full validation object
   questionable_fee_warnings: validation.warnings.filter(w =>
     w.includes("questionable fee-subtype")
+  ),
+  manual_review_warnings: validation.warnings.filter(w =>
+    w.includes("marked needs_manual_review")
   ),
   validated_at: validation.validated_at,
   errors: validation.errors,
   warnings: validation.warnings,
 };
 
-// In production, this would append to Google Sheets or n8n Data Tables.
-// For now, return the record so it can be collected by the aggregation node.
 return [{ json: storeRecord }];
 ```
 
----
-
-## Node 5 — Check More Batches (IF)
-
-**Type:** IF  
-**Position:** After "Store Batch Results"  
-**Purpose:** Route to process more batches or proceed to aggregation
-
-### Configuration
-- **Condition:** `{{ $json.batch_index < 4 }}` (true = more batches for initial test)
-- **True output:** Route back to process next batch (via n8n's native item processing — each batch item already flows through independently)
-- **False output:** Proceed to "Aggregate Classification Results"
-
-### Note on n8n Looping
-
-n8n CE processes each batch item independently through Nodes 2-4. Since Node 1
-produces 4 items (one per batch), n8n processes all 4 through the Gemini →
-Validate → Store chain automatically. The IF node is informational for the
-initial test limit; in production, remove the IF and let all batches process.
-
-For resume safety: store batch results with `batch_id` and `status`. On
-re-run, skip batches with `status === "completed"`.
+### Parameters
+- **Operation:** Run once for each item
 
 ---
 
-## Node 6 — Aggregate Classification Results (Code, JavaScript)
+## New Node 6 — Aggregate Classification Results (Code)
 
 **Type:** Code (JavaScript)  
-**Position:** After all batches processed  
-**Input:** All validated batch results (4 items for initial test)
+**Position:** After "Store Batch Results"  
+**Operation:** Run once for all items
+
+### Purpose
+Collect all 4 validated batch results, require exactly 100 unique classified
+reviews, aggregate theme frequencies, and fail if any batch is missing/failed.
 
 ### JavaScript Code
 
 ```javascript
 // Phase 3.2 — Aggregate Classification Results
-// Input: All validated batch classification results
-// Output: Aggregated theme frequencies with run labels
+// Input: 4 items (one per validated batch)
+// Output: Aggregated theme frequencies and run summary
 
 const VALID_THEME_IDS = ["T1", "T2", "T3", "T4", "T5"];
-const VALID_SENTIMENTS = ["positive", "negative", "neutral"];
-const VALID_FEE_TOPICS = ["fee-brokerage", "fee-other", "none"];
+const VALID_SENTIMENTS = ["positive", "negative", "neutral", "unclear", "mixed"];
+const VALID_FEE_TOPICS = ["brokerage", "dp_charges", "other_fee", "unspecified_fee", "none", "unclear"];
 
-// Collect all results from all batch items
 const allResults = [];
 const batchSummaries = [];
+let hasFailedBatch = false;
+let totalClassified = 0;
+const allClassifiedIds = [];
 
 for (const item of $input.all()) {
   const json = item.json;
-  if (json.gemini_results) {
-    allResults.push(...json.gemini_results);
-  }
+
+  // Track batch summary
   batchSummaries.push({
     batch_id: json.batch_id,
     batch_index: json.batch_index,
@@ -381,24 +484,60 @@ for (const item of $input.all()) {
     error_count: json.error_count,
     warning_count: json.warning_count,
   });
+
+  // Check for failed batches
+  if (json.status !== "completed" || json.error_count > 0) {
+    hasFailedBatch = true;
+  }
+
+  // Collect classifications from this batch
+  if (json.gemini_results && Array.isArray(json.gemini_results)) {
+    for (const result of json.gemini_results) {
+      allResults.push(result);
+      totalClassified++;
+      if (result.review_id) {
+        allClassifiedIds.push(result.review_id);
+      }
+    }
+  }
 }
 
-// Aggregate theme frequencies (one review at most once per theme)
+// --- Fail if any batch is missing or failed ---
+if (hasFailedBatch) {
+  throw new Error(
+    "Phase 3.2 aggregation failed: one or more batches did not complete successfully. " +
+    "Review batch summaries for errors."
+  );
+}
+
+// --- Require exactly 100 unique classified reviews ---
+const uniqueIds = new Set(allClassifiedIds);
+if (uniqueIds.size !== 100) {
+  throw new Error(
+    `Phase 3.2 aggregation failed: expected 100 unique classified reviews, ` +
+    `got ${uniqueIds.size}`
+  );
+}
+if (allClassifiedIds.length !== uniqueIds.size) {
+  throw new Error(
+    "Phase 3.2 aggregation failed: duplicate review IDs found across batches"
+  );
+}
+
+// --- Aggregate theme frequencies (one review at most once per theme) ---
 const themeCounts = {};
 VALID_THEME_IDS.forEach(tid => { themeCounts[tid] = 0; });
-
 const sentimentCounts = {};
 VALID_SENTIMENTS.forEach(s => { sentimentCounts[s] = 0; });
-
 const feeTopicCounts = {};
 VALID_FEE_TOPICS.forEach(ft => { feeTopicCounts[ft] = 0; });
 
-let totalReviews = 0;
 let reviewsWithThemes = 0;
+let reviewsWithoutThemes = 0;
 const questionableFees = [];
+const manualReviewFlags = [];
 
 for (const result of allResults) {
-  totalReviews++;
   const themes = result.themes || [];
   const sentiment = result.sentiment || "";
   const feeTopic = result.fee_topic || "none";
@@ -410,6 +549,8 @@ for (const result of allResults) {
         themeCounts[tid]++;
       }
     }
+  } else {
+    reviewsWithoutThemes++;
   }
 
   if (sentimentCounts[sentiment] !== undefined) {
@@ -420,23 +561,28 @@ for (const result of allResults) {
     feeTopicCounts[feeTopic]++;
   }
 
-  // Flag questionable fee-subtype claims
+  // Questionable fee-subtype claims
   const isFee = themes.includes("T1");
-  const hasFeeTopic = feeTopic !== "none";
-  if (isFee !== hasFeeTopic) {
+  const hasFeeSubtype = ["brokerage", "dp_charges", "other_fee", "unspecified_fee"].includes(feeTopic);
+  if (isFee !== hasFeeSubtype) {
     questionableFees.push(result.review_id);
   }
-}
 
-// Distinguish count scopes
-const SCOPE = "phase_3_2_initial_test"; // 100 reviews, 4 batches
+  if (result.needs_manual_review === true) {
+    manualReviewFlags.push(result.review_id);
+  }
+}
 
 return [{
   json: {
     run_id: $input.first().json.run_id || "unknown",
-    scope: SCOPE,
-    total_reviews_classified: totalReviews,
+    selection_method: "systematic_step_10_seed_42",
+    source_dataset: "analysis_sample_1000",
+    scope: "phase_3_2_initial_test",
+    total_reviews_classified: totalClassified,
+    unique_reviews_classified: uniqueIds.size,
     reviews_with_themes: reviewsWithThemes,
+    reviews_without_themes: reviewsWithoutThemes,
     batch_count: batchSummaries.length,
     batch_summaries: batchSummaries,
     theme_counts: themeCounts,
@@ -444,70 +590,84 @@ return [{
     fee_topic_counts: feeTopicCounts,
     questionable_fee_review_ids: questionableFees,
     questionable_fee_count: questionableFees.length,
-    classification_complete: totalReviews > 0,
+    manual_review_review_ids: manualReviewFlags,
+    manual_review_count: manualReviewFlags.length,
+    all_classified_review_ids: sorted(allClassifiedIds),
+    classification_complete: totalClassified === 100 && uniqueIds.size === 100,
     aggregated_at: new Date().toISOString(),
-    // Scope labels for reporting
     scope_labels: {
       pilot_25_reviews: "separate_pilot_run",
-      initial_test_100_reviews: SCOPE,
+      initial_test_100_reviews: "phase_3_2_initial_test",
       full_1000_reviews: "pending_scale_up_approval",
     },
   },
 }];
+
+function sorted(arr) {
+  return [...arr].sort();
+}
 ```
 
----
-
-## Error Handling & Retries
-
-### Gemini Node Retry Configuration
-- **Retry On Fail:** Enable
-- **Max Retries:** 3
-- **Retry Wait:** 5s, 10s, 20s (exponential backoff)
-- **Retry On:** Temporary errors (rate limits, network, 5xx)
-
-### Validation Failure Handling
-- If validation fails (`valid === false`), the batch is marked `status: "failed"` with errors recorded
-- Failed batches are NOT silently skipped
-- The aggregation node reports `error_count` per batch
-- Manual intervention required for failed batches
-
-### Resume Safety
-- Each batch result includes `batch_id`, `batch_index`, `status`
-- On re-run, check existing results and skip `status === "completed"` batches
-- Never double-count a review in theme frequencies
+### Parameters
+- **Operation:** Run once for all items
 
 ---
 
-## Data Flow Summary
+## Execution Control & Error Handling
+
+| Aspect | Configuration |
+|--------|--------------|
+| **Max batches** | 4 (100 reviews) — hard-coded limit |
+| **Gemini retries** | 3 retries with 5s/10s/20s backoff (configure in Gemini node) |
+| **Failed batch** | Marked `status: "failed"`, aggregation throws error |
+| **Partial results** | Never aggregated — all 4 batches must succeed |
+| **Resume/retry** | Re-run from "Generate Classification Batches" — batch IDs are deterministic |
+
+---
+
+## Data Flow
 
 ```
 Validate Review Dataset (succeeds)
         │
         ▼
-Generate Classification Batches (4 batches × 25 reviews)
-        │
-        ├─► Batch 1 ──► Gemini Classify ──► Validate ──► Store
-        ├─► Batch 2 ──► Gemini Classify ──► Validate ──► Store
-        ├─► Batch 3 ──► Gemini Classify ──► Validate ──► Store
-        └─► Batch 4 ──► Gemini Classify ──► Validate ──► Store
+Assert Validation Passed (Code)
         │
         ▼
-Aggregate Classification Results (theme frequencies, 100-review scope)
+Generate Classification Batches (Code, 4 items)
+        │
+    ┌───┼───┬───┬───┐
+    ▼   ▼   ▼   ▼
+Gemini Classify  (×4 independent calls)
+    │   │   │   │
+    ▼   ▼   ▼   ▼
+Validate Batch   (×4 independent validations)
+    │   │   │   │
+    ▼   ▼   ▼   ▼
+Store Batch Results (×4, classifications preserved)
+        │
+    ┌───┴───┴───┴───┐
+    ▼
+Aggregate Classification Results (Code, runs once for all 4 items)
+        │
+        ▼
+   Final theme frequencies + scope labels
 ```
 
 ---
 
 ## What Must Be Manually Tested in n8n
 
-1. **Google Sheets connection:** Verify "Get Row(s)" returns all 1,000 reviews from the correct sheet
-2. **Gemini credentials:** Verify the Gemini API key is configured in n8n credentials
-3. **Model name:** Verify `gemini-1.5-flash` (or your available model) works in your n8n instance
-4. **Batch count:** Verify Node 1 produces exactly 4 batches for the initial test
-5. **Validation logic:** Run once and confirm all 4 batches pass validation
-6. **Aggregation:** Confirm theme counts sum correctly across 4 batches
-7. **Error handling:** Temporarily break Gemini input to confirm validation catches errors
-8. **Privacy:** Confirm `original_review_text` is never in the Google Sheets data sent to Gemini
+1. **Node names:** Confirm "Get row(s) in sheet" is the exact name of your Google Sheets node
+2. **Gemini credentials:** Verify your existing Gemini credential is selected
+3. **Gemini model:** Confirm it matches the model used in the successful 25-review pilot
+4. **Worksheet:** Confirm data is in the `analysis_sample` worksheet
+5. **Batch count:** Verify Node 2 produces exactly 4 items (batches)
+6. **Response parsing:** Confirm `content.parts[0].text` contains the JSON array
+7. **Validation:** Run once and confirm all 4 batches pass validation
+8. **Aggregation:** Confirm theme counts sum correctly and exactly 100 unique reviews
+9. **Privacy:** Confirm `original_review_text` is never sent to Gemini
+10. **Do NOT scale to 1,000 reviews** without explicit approval
 
 ---
 
@@ -515,9 +675,10 @@ Aggregate Classification Results (theme frequencies, 100-review scope)
 
 | File | Purpose |
 |------|---------|
-| `docs/GEMINI_CLASSIFICATION_PROMPT.md` | Full Gemini system prompt |
+| `docs/GEMINI_CLASSIFICATION_PROMPT.md` | Gemini system prompt |
 | `src/taxonomy.py` | Theme taxonomy (Python reference) |
 | `src/batch_generator.py` | Deterministic batch generation (Python reference) |
-| `src/batch_validator.py` | Batch validation logic (Python reference) |
+| `src/batch_validator.py` | Batch validation + aggregation (Python reference) |
+| `n8n/phase_3_2_workflow.json` | Reference workflow JSON (may need adjustment for your node types) |
 | `tests/test_phase_3_2.py` | Automated local tests |
-| `n8n/phase_3_2_workflow.json` | Workflow JSON (reference, may need adjustment) |
+| `n8n/phase_3_2_node_instructions.md` | This file |

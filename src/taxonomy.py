@@ -1,7 +1,15 @@
 """Fixed theme taxonomy for Groww review classification (Phase 3.2).
 
-At most 5 themes. Each theme has a strict description and assignment
-criteria so identical issues receive consistent labels across batches.
+At most 5 themes. Each theme has strict descriptions and assignment criteria
+so identical issues receive consistent labels across batches.
+
+Key rules:
+- Unclear, gibberish, or genuinely ambiguous feedback is NOT forced into T5.
+- An empty themes array [] is valid for unclassified reviews.
+- Sentiments: positive, negative, neutral, unclear, mixed.
+- Fee topics: brokerage, dp_charges, other_fee, unspecified_fee, none, unclear.
+- Fee subtype assigned ONLY when clearly supported by customer's words.
+- Maximum 2 themes per review.
 
 Used by both the Gemini classification prompt (n8n) and the deterministic
 JavaScript validation node (n8n Code node).
@@ -13,30 +21,27 @@ from __future__ import annotations
 THEME_TAXONOMY = {
     "T1": {
         "name": "High Fees",
-        "description": "Complaints about charges, brokerage, AMC fees, transaction costs, "
-                       "hidden fees, or unexpected deductions. Distinguishes brokerage "
-                       "complaints (explicitly about brokerage) from unspecified charges "
-                       "(general fee complaints without specifying brokerage).",
+        "description": "Complaints about charges, brokerage, DP charges, AMC fees, "
+                       "transaction costs, hidden fees, or unexpected deductions.",
         "assignment_criteria": (
-            "Assign when the review mentions money being charged, deducted, or taken, "
-            "including brokerage, AMC, transaction fees, DP charges, or hidden costs. "
-            "If the review explicitly says 'brokerage', tag as fee-brokerage. "
-            "If it mentions charges/fees without saying 'brokerage', tag as fee-other. "
-            "A review can carry both fee-brokerage and fee-other if it mentions both."
+            "Assign when the review explicitly mentions money being charged, deducted, "
+            "or taken, including brokerage, DP charges, AMC, transaction fees, or hidden costs. "
+            "Do NOT assign for general dissatisfaction without any mention of money/fees."
         ),
         "examples": [
             "Charged rs2000/- for SIP",
             "brokerage 20 per order is too high",
+            "DP charges are excessive",
             "High fees and hidden charges",
-            "Unexpected deduction from account",
-            "Groww Brokerage is eating my profits"
+            "Unexpected deduction from account"
         ],
         "counter_examples": [
             "The app is slow",
             "Good customer support",
-            "Please add SWP feature"
+            "Please add SWP feature",
+            "I don't understand this app"
         ],
-        "subtypes": ["fee-brokerage", "fee-other"],
+        "subtypes": ["brokerage", "dp_charges", "other_fee", "unspecified_fee"],
     },
     "T2": {
         "name": "Technical Issues",
@@ -57,7 +62,8 @@ THEME_TAXONOMY = {
         "counter_examples": [
             "Charged too much brokerage",
             "Support team is rude",
-            "Add mutual fund SIP"
+            "Add mutual fund SIP",
+            "asdfghjkl random keys"
         ],
         "subtypes": None,
     },
@@ -67,9 +73,7 @@ THEME_TAXONOMY = {
                        "slow response, unresolved tickets, rude behavior, or ticket ID issues.",
         "assignment_criteria": (
             "Assign when the review complains about support team behavior, response time, "
-            "unresolved complaint/ticket IDs, or inability to reach support. Mentions of "
-            "ticket numbers or complaint IDs in the context of support (not just as reference) "
-            "fall here."
+            "unresolved complaint/ticket IDs, or inability to reach support."
         ),
         "examples": [
             "Support team is rude and unhelpful",
@@ -81,7 +85,8 @@ THEME_TAXONOMY = {
         "counter_examples": [
             "App is slow",
             "Charged hidden fees",
-            "Add more mutual funds"
+            "Add more mutual funds",
+            "blah blah blah nonsense"
         ],
         "subtypes": None,
     },
@@ -104,7 +109,8 @@ THEME_TAXONOMY = {
         "counter_examples": [
             "Chart IQ not loading",
             "Charged brokerage fees",
-            "Support is rude"
+            "Support is rude",
+            "sdfsdf unclear text"
         ],
         "subtypes": None,
     },
@@ -113,9 +119,11 @@ THEME_TAXONOMY = {
         "description": "Positive feedback, praise, thank you, good experience, or general "
                        "appreciation without a specific complaint or request.",
         "assignment_criteria": (
-            "Assign when the review is purely positive with no complaint, fee issue, "
+            "Assign ONLY when the review is clearly positive with no complaint, fee issue, "
             "technical problem, support complaint, or feature request. Short praise like "
-            "'good', 'nice', 'excellent' falls here."
+            "'good', 'nice', 'excellent' falls here. "
+            "Do NOT assign T5 to unclear, gibberish, or ambiguous feedback — "
+            "leave themes empty [] for those."
         ),
         "examples": [
             "Good app",
@@ -128,22 +136,24 @@ THEME_TAXONOMY = {
             "App crashes",
             "Charged hidden fees",
             "Support is rude",
-            "Please add SWP"
+            "Please add SWP",
+            "asdf unclear gibberish",
+            "blah blah nonsense"
         ],
         "subtypes": None,
     },
 }
 
-# Valid sentiment values
-VALID_SENTIMENTS = {"positive", "negative", "neutral"}
+# Valid sentiment values — includes unclear and mixed
+VALID_SENTIMENTS = {"positive", "negative", "neutral", "unclear", "mixed"}
 
-# Valid fee topic values (for fee-related reviews)
-VALID_FEE_TOPICS = {"fee-brokerage", "fee-other", "none"}
+# Valid fee topic values
+VALID_FEE_TOPICS = {"brokerage", "dp_charges", "other_fee", "unspecified_fee", "none", "unclear"}
 
 # All valid theme IDs
 VALID_THEME_IDS = set(THEME_TAXONOMY.keys())
 
-# Maximum themes per review
+# Maximum themes per review (empty array allowed for unclassified)
 MAX_THEMES_PER_REVIEW = 2
 
 # Default batch configuration
@@ -155,6 +165,9 @@ MAX_REVIEWS_FOR_INITIAL_TEST = MAX_BATCHES_FOR_INITIAL_TEST * BATCH_SIZE  # 100
 MAX_GEMINI_RETRIES = 3
 RETRY_BACKOFF_SECONDS = [5, 10, 20]
 
+# Deterministic selection seed for the 100-review test
+DETERMINISTIC_SEED = 42
+
 
 def get_theme_name(theme_id: str) -> str:
     """Return the display name for a theme ID."""
@@ -162,14 +175,14 @@ def get_theme_name(theme_id: str) -> str:
 
 
 def validate_theme_ids(theme_ids) -> bool:
-    """Check that all theme IDs are valid."""
+    """Check that all theme IDs are valid. Empty list is valid (unclassified)."""
     if not isinstance(theme_ids, list):
         return False
     return all(tid in VALID_THEME_IDS for tid in theme_ids)
 
 
 def validate_sentiment(sentiment) -> bool:
-    """Check that sentiment is valid."""
+    """Check that sentiment is valid (includes unclear, mixed)."""
     return sentiment in VALID_SENTIMENTS
 
 
@@ -179,8 +192,22 @@ def validate_fee_topic(fee_topic) -> bool:
 
 
 def is_fee_related(themes) -> bool:
-    """Check if any assigned theme is fee-related."""
+    """Check if any assigned theme is fee-related (T1)."""
     return "T1" in themes
+
+
+def is_fee_questionable(result: dict) -> bool:
+    """Flag reviews where fee-topic claim is questionable for manual review.
+
+    Questionable when:
+    - T1 assigned but fee_topic is none/unclear
+    - T1 not assigned but fee_topic is brokerage/dp_charges/other_fee/unspecified_fee
+    """
+    themes = result.get("themes", [])
+    fee_topic = result.get("fee_topic", "none")
+    is_fee = "T1" in themes
+    has_fee_subtype = fee_topic in ("brokerage", "dp_charges", "other_fee", "unspecified_fee")
+    return is_fee != has_fee_subtype
 
 
 def get_taxonomy_json() -> str:
