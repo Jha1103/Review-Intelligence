@@ -1,0 +1,112 @@
+{
+  "product": "Groww",
+  "sample_size": 1000,
+  "population_size": 10000,
+  "sample_window": {
+    "start": "2026-08-11",
+    "end": "2026-10-16"
+  },
+  "themes": {
+    "T5": {
+      "label": "General Satisfaction",
+      "count": 814
+    },
+    "T2": {
+      "label": "Technical Issues",
+      "count": 73
+    },
+    "T4": {
+      "label": "Feature Requests",
+      "count": 44
+    },
+    "T3": {
+      "label": "Poor Customer Support",
+      "count": 28
+    },
+    "T1": {
+      "label": "High Fees",
+      "count": 24
+    }
+  },
+  "satisfaction_baseline": {
+    "count": 814,
+    "share_of_sample": 0.814,
+    "note": "No substantive complaint or feature request."
+  },
+  "top_issue_themes": [
+    {
+      "rank": 1,
+      "theme_id": "T2",
+      "label": "Technical Issues",
+      "count": 73
+    },
+    {
+      "rank": 2,
+      "theme_id": "T4",
+      "label": "Feature Requests",
+      "count": 44
+    },
+    {
+      "rank": 3,
+      "theme_id": "T3",
+      "label": "Poor Customer Support",
+      "count": 28
+    }
+  ],
+  "quotes": [
+    {
+      "review_id": "e6afdabd-5336-47bd-985c-a5302b699cdb",
+      "theme_id": "T2",
+      "theme": "Technical Issues",
+      "selected_because": "order-path defect",
+      "rating": 3,
+      "review_date": "2026-10-07",
+      "text": "Please fix this glitch. Most of the time, the stop-loss doesn’t get placed, and because of this, I end up taking losses."
+    },
+    {
+      "review_id": "ec74a5f0-aa7c-4623-b74e-0bd8c04cc133",
+      "theme_id": "T3",
+      "theme": "Poor Customer Support",
+      "selected_because": "unresolved non-trade request",
+      "rating": 1,
+      "review_date": "2026-09-20",
+      "text": "Worst customer service i am requesting a simple spelling change of my surname 1 month ago and still pending my name correction"
+    },
+    {
+      "review_id": "01d9c2da-575e-46b5-9e7a-d5ce3019a168",
+      "theme_id": "T1",
+      "theme": "High Fees",
+      "selected_because": "buy/sell charge asymmetry",
+      "rating": 1,
+      "review_date": "2026-09-18",
+      "text": "bakwas app hai inka charge bahut jyada hai koi fresher hai starting me kam share hi kharidega kharine pr 10 aur bechne pr 30"
+    }
+  ],
+  "fee_confusion": {
+    "headline": "Users are not disputing the price level. They are confused by the asymmetry between buy-side and sell-side charges, and read the larger sell-side debit as being charged twice.",
+    "reviews_mentioning_fees_independent_scan": 25,
+    "classifier_theme_t1_count": 24,
+    "classifier_fee_topic_total": 25,
+    "scan_matches_fee_topic_total": true,
+    "reconciliation_note": "A multilingual keyword scan of the same sample finds 25 fee-mentioning reviews. That matches the classifier's fee-topic total (25) and exceeds its T1 theme count (24) by 1. The gap is the known discrepancy below, independently corroborated rather than reconciled away.",
+    "fee_reviews_rated_3_or_below": 19,
+    "term_hits": {
+      "charge": 16,
+      "brokerage": 12,
+      "hidden_or_deducted": 3,
+      "statutory": 2,
+      "fee": 2,
+      "amc": 1
+    },
+    "evidence_review_ids": [
+      "01d9c2da-575e-46b5-9e7a-d5ce3019a168",
+      "e6e92ebe-7f0e-41b3-83cd-fc5d8b3e2532",
+      "f858c1d9-f83b-48e8-b6cd-8fe51540d6c5"
+    ],
+    "root_cause": "DP charges are levied only when shares leave the demat account, so they apply on sell transactions and not on buys; stamp duty applies on the buy side only. The sell leg therefore normally costs more than a comparable buy leg."
+  },
+  "known_discrepancies": [
+    "Fee-topic labels total 25 while theme T1 totals 24; one review carries a fee topic without the T1 theme. Flagged, not silently reconciled."
+  ],
+  "methodology_note": "Stratified random sample (seed 42) of 1,000 from 10,000 collected public Google Play reviews, stratified by review week and rating. Counts are theme assignments within this sample, not estimates of the Groww customer base. A review may carry up to 2 themes, so theme counts sum above the number of classified reviews."
+}

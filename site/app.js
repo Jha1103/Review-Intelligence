@@ -323,6 +323,30 @@
   renderCanvas();
   resetDemo();
 
+  // Mobile navigation toggle. The button exists in the markup but was
+  // never wired up, so the menu could not be opened on small screens.
+  const menuToggle = document.getElementById('menu-toggle');
+  const mobileNav = document.getElementById('mobile-nav');
+  if (menuToggle && mobileNav) {
+    const setNav = (open) => {
+      mobileNav.hidden = !open;
+      menuToggle.setAttribute('aria-expanded', String(open));
+      menuToggle.setAttribute('aria-label', open ? 'Close navigation' : 'Open navigation');
+      menuToggle.textContent = open ? '\u2715' : '\u2630';
+    };
+    menuToggle.addEventListener('click', () => setNav(mobileNav.hidden));
+    mobileNav.addEventListener('click', (e) => {
+      if (e.target.tagName === 'A') setNav(false);
+    });
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && !mobileNav.hidden) setNav(false);
+    });
+    // Leaving mobile width should never strand the panel open.
+    window.matchMedia('(min-width: 861px)').addEventListener('change', (e) => {
+      if (e.matches) setNav(false);
+    });
+  }
+
   // Expose for debugging
   window.__reviewPulse = { NODES, SCENARIOS, EVIDENCE, state };
 })();

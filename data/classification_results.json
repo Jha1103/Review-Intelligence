@@ -1,0 +1,24 @@
+{
+  "_comment": "Recorded output of the n8n + Gemini classification run over data/analysis_sample.csv (40 batches x 25 reviews). Single source of truth for theme counts. Do not hardcode these numbers anywhere else.",
+  "product": "Groww",
+  "platform": "google_play_android",
+  "run_scope": "full_1000_review_sample",
+  "sample_size": 1000,
+  "population_size": 10000,
+  "sample_window": { "start": "2026-08-11", "end": "2026-10-16" },
+  "classifier": { "model": "gemini-3.1-flash-lite-preview", "batches": 40, "batch_size": 25 },
+  "taxonomy": {
+    "T1": "High Fees",
+    "T2": "Technical Issues",
+    "T3": "Poor Customer Support",
+    "T4": "Feature Requests",
+    "T5": "General Satisfaction"
+  },
+  "theme_counts": { "T5": 814, "T2": 73, "T4": 44, "T3": 28, "T1": 24 },
+  "unclassified_reviews": 38,
+  "fee_topic_counts": { "brokerage": 14, "unspecified_fee": 11 },
+  "known_discrepancies": [
+    "Fee-topic labels total 25 while theme T1 totals 24; one review carries a fee topic without the T1 theme. Flagged, not silently reconciled."
+  ],
+  "methodology_note": "Stratified random sample (seed 42) of 1,000 from 10,000 collected public Google Play reviews, stratified by review week and rating. Counts are theme assignments within this sample, not estimates of the Groww customer base. A review may carry up to 2 themes, so theme counts sum above the number of classified reviews."
+}
