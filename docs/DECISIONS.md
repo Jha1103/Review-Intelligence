@@ -17,15 +17,18 @@
 | D13 | `score` from google-play-scraper maps to `rating`; no per-review public URLs assumed or fabricated. Source provenance is the Google Play app page URL + `reviewId`. | Accurate field mapping; no invention. | Approved |
 | D14 | Phase 3.2 uses a fixed taxonomy of exactly 5 themes (T1-T5) with strict descriptions and assignment criteria. Maximum 2 themes per review. Fee subtype distinguished: fee-brokerage vs fee-other. Unclear/unclassified option available. | Requirement C: consistent, auditable theme labels across batches. | Approved |
 | D15 | Phase 3.2 initial test limited to 4 batches = 100 reviews. Full 1,000-review scale-up requires explicit user approval. | Controlled API usage, bounded risk, auditability. | Approved |
+| D16 | MCP Client node (not AI Agent toolWorkflow) used for deterministic tool calls after approval. Connects to authenticated MCP Server Trigger in delivery workflow. | Requirement I: regular MCP Client Tool, no AI Agent unless necessary. | Approved |
+| D17 | Approval/audit record keyed by run_id + SHA-256 payload hash, stored in Google Sheets approval_log. Delivery workflow independently verifies before any external write. | Requirement K: prevent unapproved actions and duplicate writes. | Approved |
+| D18 | Three quote candidates verified against eligible source reviews (quote_eligible=yes) before publication is allowed. | Requirement C: verbatim quotes with real review IDs, no PII. | Approved |
 
 ### Open items needing user input (integration phase only)
 1. Confirm initial owner account created via browser at `http://localhost:5678`.
 2. Approve Phase 3.2 100-review test (4 batches) before running in n8n.
 3. Gemini API key (supplied by user, never committed).
-4. Google Sheets connection details for storing cleaned data.
+4. Google Sheets connection details for storing cleaned data + approval_log sheet.
 5. Target existing Google Doc ID and Gmail draft destination (integration phase).
 6. Confirmation of supported Gemini model before implementation.
-7. n8n Data Tables or Google Sheets choice for persistence store.
+7. Bearer auth credential for MCP Server Trigger.
 8. Approval to scale from 100-review test to full 1,000-review classification.
 
 ### Product configuration (confirmed — no longer open)

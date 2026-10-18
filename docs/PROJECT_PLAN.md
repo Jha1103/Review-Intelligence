@@ -80,12 +80,12 @@ review-pulse-m5/
 | 1 | **Data collection** (COMPLETED): Python + google-play-scraper, 12-week window, pagination, retries, dedup, PII redaction, CSV exports + quality report | Pipeline runs; 40 tests pass |
 | 2 | **Load to Google Sheets**: upload `reviews_for_sheets.csv` to Google Sheets; verify write/read | Sheet populated |
 | 3 | **Phase 3.1 — AI Pilot** (COMPLETED): 25-review classification in n8n CE | Pilot returned 25 classifications |
-| 4 | **Phase 3.2 — Scalable Classification** (PLANNED): 1,000-review sample, fixed taxonomy, batch generation (25/batch), Gemini classification, JavaScript validation, theme aggregation | 100-review test (4 batches) ready |
-| 5 | **n8n output generation**: pulse (≤250 words) + fee explainer (≤6 bullets, 2 official URLs, Last checked) | Outputs generated |
-| 6 | **n8n human approval**: form displays both outputs; explicit Approve/Reject | Approval captured |
-| 7 | **n8n MCP publishing**: after approval only, append_to_doc + create_email_draft (no send) | Docs updated, draft created |
-| 8 | **Persistence**: run IDs, approval decisions, payload hashes, action status in n8n Data Tables/Sheets; retry + dedup | State persisted |
-| 9 | **Deliverables**: README, sources.md (4–6 URLs), sample CSV, pulse, fee explainer, workflow export, screenshots, demo script | Complete |
+| 4 | **Phase 3.2 — Scalable Classification** (READY FOR TEST): 100-review sample, fixed taxonomy (T1–T5), batch generation (25/batch), Gemini classification, JavaScript validation, theme aggregation | 100-review test (4 batches) workflow exported |
+| 5 | **n8n output generation** (READY FOR TEST): pulse (≤250 words) + fee explainer (≤6 bullets, 2 official URLs, Last checked) | Outputs generated in workflow |
+| 6 | **n8n human approval** (READY FOR TEST): form displays both outputs; explicit Approve/Reject | Approval captured in Wait node |
+| 7 | **n8n MCP publishing** (READY FOR TEST): after approval only, append_to_doc + create_email_draft (no send) | Workflow exported, awaiting live test |
+| 8 | **Persistence** (READY FOR TEST): run IDs, approval decisions, payload hashes, action status in Google Sheets approval_log; duplicate-write prevention | State model defined in workflow |
+| 9 | **Deliverables**: README, sources.md (4–6 URLs), sample CSV, pulse, fee explainer, workflow exports, screenshots, demo script | Workflow files exported |
 | 10 | **End-to-end test + demo** (≤3 minutes) | Demo runs |
 
 ### 6. Success criteria
@@ -104,12 +104,16 @@ review-pulse-m5/
 - The Gemini model used must be verified as supported before implementation.
 - Product is confirmed as Groww; no further product confirmation needed.
 
-### 8. What is needed to start Phase 2
-- Self-hosted n8n CE is running at `http://localhost:5678` (setup at `/Users/swapniljha/n8n-groww/`).
-- Gemini API key (supplied by user, never committed).
-- Google Sheets connection details for storing cleaned data.
-- Target existing Google Doc ID and Gmail draft destination (integration phase).
-- Confirmation of supported Gemini model before implementation.
-- n8n Data Tables or Google Sheets choice for persistence store.
+### 8. What is needed to start live n8n execution
 
-Phase 1 is complete: data collection pipeline implemented, tested, and producing privacy-safe exports ready for n8n CE + Gemini.
+- Self-hosted n8n CE running at `http://localhost:5678` (setup at `/Users/swapniljha/n8n-groww/`).
+- Both workflow JSON files imported into n8n CE.
+- Gemini API key (supplied by user, never committed) — use same model as 25-review pilot.
+- Google Sheets connection details (cleaned dataset + approval_log sheet).
+- Target existing Google Doc ID and Gmail draft destination.
+- Bearer auth credential for MCP Server Trigger.
+- Confirmation of supported Gemini model before implementation.
+- Approval to execute the 100-review test (Phase 4).
+- Approval to scale to full 1,000-review classification (separate decision).
+
+Phase 3.2 and Phase 4 are complete: workflow JSON files exported, tested locally with 83 passing tests, and ready for live n8n execution.

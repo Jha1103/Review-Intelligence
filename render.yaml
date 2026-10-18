@@ -1,0 +1,15 @@
+# Render Blueprint: deploy a read-only static case study, never the n8n backend.
+services:
+  - type: web
+    name: groww-review-intelligence-case-study
+    runtime: static
+    buildCommand: echo "Static portfolio — no build required"
+    staticPublishPath: ./site
+    autoDeployTrigger: commit
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin

@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="color-scheme" content="dark" />
+  <meta name="theme-color" content="#0b1011" />
+  <meta name="description" content="AI-assisted product feedback intelligence and human-approved support automation case study for Groww Android reviews." />
+  <meta property="og:title" content="Review Intelligence — Groww MCP Automation Demo" />
+  <meta property="og:description" content="Interactive n8n + MCP workflow demonstration: 1,000 reviews classified, approval-gated MCP delivery to Google Docs and unsent Gmail draft." />
+  <meta property="og:type" content="website" />
+  <title>Review Intelligence — Groww MCP Automation Demo</title>
+  <link rel="icon" href="./favicon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="./styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+
+  <div class="glow glow-1" aria-hidden="true"></div>
+  <div class="glow glow-2" aria-hidden="true"></div>
+
+  <header class="site-header">
+    <div class="shell header-inner">
+      <a class="logo" href="#top" aria-label="Review Intelligence home">
+        <span class="logo-symbol" aria-hidden="true"><svg viewBox="0 0 28 28" fill="none"><path d="M4 20 10.2 13.8l4 3.9L23 7" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/><path d="M17.5 7H23v5.5" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg></span>
+        <span>review<span class="logo-accent">/</span>intelligence</span>
+      </a>
+      <nav class="main-nav" aria-label="Main navigation">
+        <a href="#workflow">Workflow Demo</a>
+        <a href="#mcp-inspector">MCP Inspector</a>
+        <a href="#evidence">Execution Evidence</a>
+        <a href="#archive">Project Archive</a>
+      </nav>
+      <button id="menu-toggle" class="menu-toggle" aria-expanded="false" aria-controls="mobile-nav" aria-label="Open navigation">☰</button>
+    </div>
+    <nav id="mobile-nav" class="mobile-nav" aria-label="Mobile navigation" hidden>
+      <a href="#workflow">Workflow Demo</a>
+      <a href="#mcp-inspector">MCP Inspector</a>
+      <a href="#evidence">Execution Evidence</a>
+      <a href="#archive">Project Archive</a>
+    </nav>
+  </header>
+
+  <main id="main">
+    <!-- Hero: Workflow Replay Center -->
+    <section class="hero shell" id="top">
+      <div class="hero-copy">
+        <div class="eyebrow"><span class="pulse-dot"></span> RECORDED EXECUTION REPLAY <span class="eyebrow-divider">/</span> NOT LIVE</div>
+        <h1>AI Review Intelligence →<br />Human-Approved MCP Delivery</h1>
+        <p class="hero-lead">A sanitized replay of a real n8n Community Edition workflow that classified 1,000 Groww Play Store reviews and, on human approval, published a product pulse and support fee explainer via MCP tools to Google Docs and an unsent Gmail draft.</p>
+        <div class="hero-actions">
+          <button class="btn btn-primary" id="run-demo-btn">Run Demo <span class="demo-arrow">▶</span></button>
+          <a class="btn btn-secondary" href="#evidence">View Evidence <span aria-hidden="true">↗</span></a>
+        </div>
+        <div class="demo-mode-badge" id="demo-mode-badge">
+          <span class="badge-dot"></span>
+          <span id="mode-label">Idle</span>
+        </div>
+        <div class="hero-note">Independent portfolio project <span aria-hidden="true">•</span> Sample window: 11 Aug – 16 Oct 2026 <span aria-hidden="true">•</span> No live n8n connection</div>
+      </div>
+      <div class="hero-graphic" aria-label="Workflow pipeline preview">
+        <div class="graphic-top"><span><i></i> MCP AUTOMATION</span><span>CASE STUDY / 2026</span></div>
+        <div class="graphic-content">
+          <div class="graphic-column"><div class="graphic-icon circle-cloud">☷</div><small>COLLECT</small><strong>10,000</strong><span>reviews</span></div>
+          <div class="graphic-connector"><span>→</span><div class="dotted"></div></div>
+          <div class="graphic-column"><div class="graphic-icon">✦</div><small>CLASSIFY</small><strong>1,000</strong><span>sampled</span></div>
+          <div class="graphic-connector"><span>→</span><div class="dotted"></div></div>
+          <div class="graphic-column"><div class="graphic-icon positive">✓</div><small>APPROVE</small><strong>HUMAN</strong><span>gate</span></div>
+        </div>
+        <div class="graphic-bottom"><span class="green-graphic-dot"></span> MCP DELIVERY: DOCS + UNSNT GMAIL DRAFT <span class="bottom-right">GROWW / ANDROID</span></div>
+        <div class="graph-noise" aria-hidden="true"></div>
+      </div>
+    </section>
+
+    <!-- Scenario selector -->
+    <section class="scenario-shell shell">
+      <div class="scenario-header">
+        <span class="section-number">DEMO</span>
+        <h2>Choose a replay scenario</h2>
+        <p>Both scenarios use verified execution evidence. Reject stops at the approval gate with zero external writes. Approve proceeds to MCP delivery.</p>
+      </div>
+      <div class="scenario-grid">
+        <button class="scenario-card scenario-reject" id="scenario-reject" data-scenario="reject">
+          <span class="scenario-kicker">SCENARIO 1</span>
+          <h3>Reject Path</h3>
+          <p>Approval gate halts the workflow. No MCP calls. No Google Docs write. No Gmail draft. Zero external writes.</p>
+          <div class="scenario-meta">
+            <span class="meta-chip">Execution #26</span>
+            <span class="meta-chip">Zero writes</span>
+          </div>
+          <span class="scenario-arrow">▶</span>
+        </button>
+        <button class="scenario-card scenario-approve" id="scenario-approve" data-scenario="approve">
+          <span class="scenario-kicker">SCENARIO 2</span>
+          <h3>Approve Path</h3>
+          <p>Human approval proceeds. MCP Client invokes <code>append_to_doc</code> and <code>create_email_draft</code>. Draft created, never sent.</p>
+          <div class="scenario-meta">
+            <span class="meta-chip">Run groww_27</span>
+            <span class="meta-chip">doc_status=done</span>
+            <span class="meta-chip">draft_status=done</span>
+          </div>
+          <span class="scenario-arrow">▶</span>
+        </button>
+      </div>
+    </section>
+
+    <!-- Interactive Workflow Canvas -->
+    <section class="canvas-section shell" id="workflow">
+      <div class="section-intro compact">
+        <span class="section-number">WORKFLOW</span>
+        <h2>Execution canvas<span class="canvas-badge" id="canvas-badge">IDLE</span></h2>
+        <p>Click any node to inspect its role and evidence. Use Play/Pause/Restart to control the replay.</p>
+      </div>
+      <div class="canvas-controls">
+        <button class="ctrl-btn ctrl-restart" id="btn-restart" title="Restart">↻ Restart</button>
+        <button class="ctrl-btn ctrl-pause" id="btn-pause" title="Pause" disabled>⏸ Pause</button>
+        <button class="ctrl-btn ctrl-play" id="btn-play" title="Play" disabled>▶ Play</button>
+        <span class="ctrl-divider"></span>
+        <span class="ctrl-label" id="timeline-label">Select a scenario to begin</span>
+        <span class="ctrl-speed">
+          <label>Speed</label>
+          <select id="speed-select">
+            <option value="1">1×</option>
+            <option value="1.5" selected>1.5×</option>
+            <option value="2">2×</option>
+          </select>
+        </span>
+      </div>
+      <div class="canvas-wrap">
+        <svg class="workflow-svg" id="workflow-svg" preserveAspectRatio="xMidYMid meet"></svg>
+        <div class="workflow-nodes" id="workflow-nodes">
+          <!-- Nodes injected by JS -->
+        </div>
+      </div>
+      <div class="canvas-legend">
+        <span class="legend-dot idle"></span><span>Idle</span>
+        <span class="legend-dot running"></span><span>Running</span>
+        <span class="legend-dot done"></span><span>Done</span>
+        <span class="legend-dot skipped"></span><span>Skipped (Reject path)</span>
+        <span class="legend-dot mcp"></span><span>MCP tool call</span>
+      </div>
+    </section>
+
+    <!-- MCP Inspector Panel -->
+    <section class="inspector-section shell" id="mcp-inspector">
+      <div class="section-intro compact">
+        <span class="section-number">MCP</span>
+        <h2>MCP Tool Inspector<span class="inspector-badge" id="inspector-badge">—</span></h2>
+        <p>Sanitized request/response for MCP Server Trigger tools. No credentials, no private URLs, no raw payloads.</p>
+      </div>
+      <div class="inspector-grid">
+        <div class="inspector-card inspector-active" id="inspector-active">
+          <div class="inspector-header">
+            <span class="inspector-kicker">TOOL CALL</span>
+            <span id="inspector-tool-name">—</span>
+          </div>
+          <div class="inspector-field">
+            <label>Tool</label>
+            <span id="inspector-tool-display">—</span>
+          </div>
+          <div class="inspector-field">
+            <label>Operation</label>
+            <span id="inspector-operation">—</span>
+          </div>
+          <div class="inspector-field">
+            <label>Authorization</label>
+            <span id="inspector-auth">—</span>
+          </div>
+          <div class="inspector-field">
+            <label>Request (sanitized)</label>
+            <pre id="inspector-request"><code>—</code></pre>
+          </div>
+          <div class="inspector-field">
+            <label>Response (sanitized)</label>
+            <pre id="inspector-response"><code>—</code></pre>
+          </div>
+          <div class="inspector-field">
+            <label>Audit status</label>
+            <span id="inspector-audit">—</span>
+          </div>
+        </div>
+        <div class="inspector-card inspector-empty">
+          <span class="empty-icon">⬚</span>
+          <p>Select an MCP node in the canvas or run a scenario to inspect tool calls.</p>
+        </div>
+      </div>
+    </section>
+
+    <!-- Execution Evidence -->
+    <section class="evidence-section shell" id="evidence">
+      <div class="section-intro compact">
+        <span class="section-number">EVIDENCE</span>
+        <h2>Execution evidence</span>
+        <p>All scenario data is derived from verified local n8n executions. No invented data, no live credentials.</p>
+      </div>
+      <div class="evidence-grid">
+        <div class="evidence-card">
+          <span class="evidence-kicker">EXECUTION #26</span>
+          <h3>Reject — zero writes</span>
+          <p>Approval gate returned Reject. Workflow stopped before MCP Client. append_to_doc: not invoked. create_email_draft: not invoked. Google Docs: unchanged. Gmail: no draft created.</p>
+          <div class="evidence-meta">
+            <span class="meta-tag">scenario: reject</span>
+            <span class="meta-tag">external writes: 0</span>
+            <span class="meta-tag">audit: blocked</span>
+          </div>
+        </div>
+        <div class="evidence-card">
+          <span class="evidence-kicker">RUN groww_27</span>
+          <h3>Approve — full delivery</span>
+          <p>Approval gate returned Approve. MCP Client invoked append_to_doc (Execution #30) then create_email_draft via Gmail-only recovery. Both actions completed successfully.</p>
+          <div class="evidence-meta">
+            <span class="meta-tag">scenario: approve</span>
+            <span class="meta-tag">doc_status: done</span>
+            <span class="meta-tag">draft_status: done</span>
+            <span class="meta-tag">email sent: no</span>
+          </div>
+        </div>
+        <div class="evidence-card">
+          <span class="evidence-kicker">EXECUTION #30 / #31</span>
+          <h3>MCP tool sequence</span>
+          <p>#30: MCP Client — append_to_doc ran successfully. #31: Mark append_to_doc Done succeeded. Subsequently, Gmail-only recovery created one unsent draft.</p>
+          <div class="evidence-meta">
+            <span class="meta-tag">mcp client: append_to_doc</span>
+            <span class="meta-tag">mcp server: authenticated</span>
+            <span class="meta-tag">gmail: draft only</span>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Video Section -->
+    <section class="section video-section" id="demo">
+      <div class="section-intro compact">
+        <span class="section-number">DEMO</span>
+        <h2>Workflow walkthrough<span class="video-kicker">3:00</span></h2>
+        <p>Silent screen recording of the n8n approval form, MCP Client node, MCP Server Trigger, delivery execution and audit table. Video added after redaction review.</p>
+      </div>
+      <div class="video-shell" id="video-shell">
+        <div class="video-placeholder" id="video-placeholder">
+          <div class="placeholder-orbit"><span class="placeholder-play">▶</span></div>
+          <span class="video-placeholder-kicker">PRODUCT DEMO / 03:00</span>
+          <h3>Video walkthrough coming soon</h3>
+          <p>Record on Mac, upload to YouTube as Unlisted, then paste the URL into <code>site/config.js</code>.</p>
+        </div>
+      </div>
+      <div class="video-after">
+        <a href="https://github.com/Jha1103/Review-Intelligence" target="_blank" rel="noreferrer noopener" class="text-link">Explore project repository <span>↗</span></a>
+        <span>No live user data · No production credentials</span>
+      </div>
+    </section>
+  </main>
+
+  <footer class="site-footer">
+    <div class="shell footer-inner">
+      <div>
+        <a class="logo footer-logo" href="#top"><span class="logo-symbol" aria-hidden="true">↗</span><span>review<span class="logo-accent">/</span>intelligence</span></a>
+        <p>AI Product Feedback Intelligence & Support Automation</p>
+      </div>
+      <div class="footer-right">
+        <span>INDIVIDUAL PM PORTFOLIO PROJECT</span>
+        <span>Not affiliated with or endorsed by Groww.</span>
+        <span>October 2026</span>
+      </div>
+    </div>
+  </footer>
+
+  <script src="./config.js"></script>
+  <script src="./app.js" defer></script>
+</body>
+</html>

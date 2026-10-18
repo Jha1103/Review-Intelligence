@@ -55,7 +55,9 @@
 │ LAYER 5 — MCP PUBLISHING (n8n MCP Client + Server Trigger)  │
 │  append_to_doc  → structured dated entry to Google Doc      │
 │  create_email_draft → Gmail draft (NEVER send)              │
-│  Both tools independently verify authorization              │
+│  Both tools independently verify authorization via          │
+│  run_id + SHA-256 payload hash against approval record      │
+│  Duplicate-write prevention per run_id + operation          │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -77,7 +79,7 @@
 | Output Layer | Pulse (≤250 words), fee explainer (≤6 bullets, 2 URLs, Last checked) | n8n + Gemini |
 | Human Approval | Form displays both outputs; explicit Approve/Reject; Reject = no writes | n8n CE form |
 | MCP Layer | `append_to_doc`, `create_email_draft` after approval only; no email send | n8n MCP Client Tool + MCP Server Trigger |
-| Persistence | Run IDs, approval decisions, payload hashes, action status; retry/dedup | n8n Data Tables or Google Sheets |
+| Persistence | Run IDs, approval decisions, payload hashes, action status; retry/dedup | Google Sheets approval_log |
 
 ## 3. Field mapping (google-play-scraper → schema)
 
@@ -136,13 +138,13 @@ n8n workflow reads this store before any MCP call; refuses unless `approvalState
 **Configured manually in self-hosted n8n CE (by user):**
 - Self-hosted n8n CE instance at `http://localhost:5678` (Docker Compose, `~/n8n-groww/`)
 - Initial owner account created via browser (no placeholder password in compose)
-- Google Sheets connection (store cleaned dataset).
+- Google Sheets connection (store cleaned dataset + approval_log sheet).
 - Gemini API credential in n8n.
-- n8n Form for human approval.
-- MCP Server Trigger tools `append_to_doc` and `create_email_draft` registered and authenticated.
-- MCP Client Tool in the workflow.
+- n8n Form for human approval (Wait node).
+- MCP Server Trigger tools `append_to_doc` and `create_email_draft` registered and authenticated (bearer auth).
+- MCP Client Tool in the main workflow.
 - Existing Google Doc ID and Gmail destination (integration phase only).
-- n8n Data Tables or Google Sheets for persistence.
+- Approval_log sheet for persistence of run_id, payload_hash, approval state, action status.
 
 No code in this repository writes to Google or Gmail directly; all external writes happen through n8n MCP after approval.
 
