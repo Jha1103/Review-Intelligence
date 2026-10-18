@@ -102,7 +102,7 @@
       x: 270,
       y: 210,
     },
-    { id: 'batches', label: 'Generate Batches', sub: '4 × 25 reviews', icon: '📦', x: 480, y: 210 },
+    { id: 'batches', label: 'Generate Batches', sub: '40 × 25 reviews', icon: '📦', x: 480, y: 210 },
     {
       id: 'gemini',
       label: 'Gemini Classification',

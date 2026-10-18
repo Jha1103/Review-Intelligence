@@ -1,5 +1,5 @@
 {
-  "name": "Groww - Delivery Actions",
+  "name": "Groww - Delivery Actions — SAFE INTEGRATION COPY",
   "nodes": [
     {
       "parameters": {
@@ -31,6 +31,271 @@
     },
     {
       "parameters": {
+        "jsCode": "const d=$input.first().json;\nconst op=String(d.operation??'');\nif (!['append_to_doc','create_email_draft'].includes(op)) throw new Error('Forbidden operation');\nif (!/^[a-zA-Z0-9_-]{4,128}$/.test(String(d.run_id??''))) throw new Error('Invalid run ID');\nif (!/^[a-f0-9]{64}$/i.test(String(d.payload_hash??''))) throw new Error('Missing SHA-256 payload hash');\nif (typeof d.payload_json!=='string'||d.payload_json.length<10||d.payload_json.length>25000) throw new Error('Invalid payload');\nconst p=JSON.parse(d.payload_json);\nif (p.product!=='Groww'||!p.weekly_pulse||!Array.isArray(p.explanation_bullets)||p.explanation_bullets.length>6) throw new Error('Payload missing required fields');\nreturn [{json:{operation:op,run_id:d.run_id,payload_hash:d.payload_hash,payload_json:d.payload_json}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        544,
+        272
+      ],
+      "id": "5c929c53-4b14-46e9-a2bc-93d4a1cf4187",
+      "name": "Check Tool Inputs"
+    },
+    {
+      "parameters": {
+        "operation": "get",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "groww_approval_audit"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "run_id",
+              "keyValue": "={{ $('Hash Incoming Payload').first().json.run_id }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        928,
+        96
+      ],
+      "id": "05f0986a-05e4-42c9-a01a-7b960ede9d02",
+      "name": "Get Approved Audit Record"
+    },
+    {
+      "parameters": {
+        "jsCode": "const req=$('Hash Incoming Payload').first().json;\nconst rows=$input.all().map(i=>i.json).filter(r=>r.run_id===req.run_id);\nif(rows.length!==1) throw new Error('No unique persisted approval record');\nconst row=rows[0];\nif(row.status!=='approved'||row.payload_hash!==req.payload_hash||row.payload_hash!==$('Check Tool Inputs').first().json.payload_hash||row.payload_json!==req.payload_json) throw new Error('Not approved or altered payload');\n// Crypto node recomputed the hash; `payload_hash` is overwritten with the digest.\nconst op=req.operation;\nconst key=op==='append_to_doc'?'doc_status':'draft_status';\nif(row[key]!=='pending') throw new Error('Operation already claimed or completed');\nconst p=JSON.parse(req.payload_json);\nif(!Array.isArray(p.quote_checks)||p.quote_checks.length!==3||!p.quote_checks.every(q=>q.matches_cleaned_source===true)) throw new Error('Quote evidence absent');\nreturn [{json:{operation:op,run_id:req.run_id,payload_hash:req.payload_hash,payload_json:req.payload_json,\n  doc_status:row.doc_status,draft_status:row.draft_status}}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1152,
+        96
+      ],
+      "id": "87d78b35-dd03-4b65-99aa-5bfa96be8312",
+      "name": "Verify Persisted Approval"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "groww_approval_audit"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "run_id",
+              "keyValue": "={{ $('Verify Persisted Approval').first().json.run_id }}"
+            },
+            {
+              "keyName": "payload_hash",
+              "keyValue": "={{ $('Verify Persisted Approval').first().json.payload_hash }}"
+            },
+            {
+              "keyName": "doc_status",
+              "keyValue": "pending"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "doc_status": "in_progress"
+          },
+          "schema": [
+            {
+              "id": "doc_status",
+              "displayName": "doc_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1088,
+        432
+      ],
+      "id": "34ccfd15-7479-4c6c-8446-bf8aba21af41",
+      "name": "Claim append_to_doc Once"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "groww_approval_audit"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "run_id",
+              "keyValue": "={{ $('Verify Persisted Approval').first().json.run_id }}"
+            },
+            {
+              "keyName": "payload_hash",
+              "keyValue": "={{ $('Verify Persisted Approval').first().json.payload_hash }}"
+            },
+            {
+              "keyName": "doc_status",
+              "keyValue": "in_progress"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "doc_status": "done"
+          },
+          "schema": [
+            {
+              "id": "doc_status",
+              "displayName": "doc_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2000,
+        112
+      ],
+      "id": "a94c2902-d692-4a97-9fa0-9f6bd8eb2e88",
+      "name": "Mark append_to_doc Done"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "groww_approval_audit"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "run_id",
+              "keyValue": "={{ $('Verify Persisted Approval').first().json.run_id }}"
+            },
+            {
+              "keyName": "payload_hash",
+              "keyValue": "={{ $('Verify Persisted Approval').first().json.payload_hash }}"
+            },
+            {
+              "keyName": "draft_status",
+              "keyValue": "pending"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "draft_status": "in_progress"
+          },
+          "schema": [
+            {
+              "id": "draft_status",
+              "displayName": "draft_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        1728,
+        992
+      ],
+      "id": "69c80dbe-afde-42cd-895e-54e8b32552ac",
+      "name": "Claim create_email_draft Once"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "dataTableId": {
+          "__rl": true,
+          "mode": "name",
+          "value": "groww_approval_audit"
+        },
+        "matchType": "allConditions",
+        "filters": {
+          "conditions": [
+            {
+              "keyName": "run_id",
+              "keyValue": "={{ $('Verify Persisted Approval').first().json.run_id }}"
+            },
+            {
+              "keyName": "payload_hash",
+              "keyValue": "={{ $('Verify Persisted Approval').first().json.payload_hash }}"
+            },
+            {
+              "keyName": "draft_status",
+              "keyValue": "in_progress"
+            }
+          ]
+        },
+        "columns": {
+          "mappingMode": "defineBelow",
+          "value": {
+            "draft_status": "done"
+          },
+          "schema": [
+            {
+              "id": "draft_status",
+              "displayName": "draft_status",
+              "required": false,
+              "defaultMatch": false,
+              "display": true,
+              "type": "string",
+              "canBeUsedToMatch": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.dataTable",
+      "typeVersion": 1.1,
+      "position": [
+        2576,
+        1120
+      ],
+      "id": "9412b102-6cfe-4ff0-9a6d-93b64fa1f244",
+      "name": "Mark create_email_draft Done"
+    },
+    {
+      "parameters": {
         "conditions": {
           "options": {
             "caseSensitive": true,
@@ -40,8 +305,8 @@
           },
           "conditions": [
             {
-              "id": "c3ed8eda",
-              "leftValue": "={ String($json.operation ?? '').trim() }",
+              "id": "83a956bf-2eb9-4232-869c-fc71f6314d60",
+              "leftValue": "={{ String($json.operation ?? '').trim() }}",
               "rightValue": "append_to_doc",
               "operator": {
                 "type": "string",
@@ -57,11 +322,11 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        224,
-        0
+        1424,
+        96
       ],
-      "id": "524e64c9-29f0-4473-9897-51f06cda8065",
-      "name": "If"
+      "id": "ef45365d-f3ec-4c89-a1f3-74c54e8429ca",
+      "name": "If2"
     },
     {
       "parameters": {
@@ -74,8 +339,8 @@
           },
           "conditions": [
             {
-              "id": "8e13a9c2",
-              "leftValue": "={ String($json.operation ?? '').trim() }",
+              "id": "323c9d1d-73d5-493c-b09e-bd885811d5c5",
+              "leftValue": "={{ String($json.operation ?? '').trim() }}",
               "rightValue": "create_email_draft",
               "operator": {
                 "type": "string",
@@ -91,21 +356,21 @@
       "type": "n8n-nodes-base.if",
       "typeVersion": 2.3,
       "position": [
-        448,
-        96
+        1200,
+        1024
       ],
-      "id": "4ea414cc-dcdc-4af9-b329-5225d45952a0",
-      "name": "If1"
+      "id": "d0c99986-33b0-4e44-b631-38c2c29cf16d",
+      "name": "If3"
     },
     {
       "parameters": {
         "operation": "update",
-        "documentURL": "https://docs.google.com/document/d/1wD1D38D8Pej7BN7Sva_98BYafjwY4TiVR-K4whHMebI/edit?tab=t.0",
+        "documentURL": "https://docs.google.com/document/d/REPLACE_WITH_YOUR_DOC_ID/edit",
         "actionsUi": {
           "actionFields": [
             {
               "action": "insert",
-              "text": "={{ JSON.stringify(JSON.parse($json.payload_json), null, 2) + '\\n\\n' }}"
+              "text": "={{ (() => { const p = JSON.parse($('Verify Persisted Approval').first().json.payload_json); const rule = '-'.repeat(60); return [   rule,   'WEEKLY PRODUCT PULSE — ' + p.date,   rule, '',   'Top issue themes: ' + p.top_themes.map(t => t.label + ' (' + t.review_count + ')').join(', '), '',   p.weekly_pulse, '',   'IDENTIFIED FEE ISSUE', p.identified_fee_issue, '',   'FEE EXPLANATION',   ...p.explanation_bullets.map(b => '  • ' + b), '',   'Sources: ' + p.source_links.join('  |  '),   'Last checked: ' + p.last_checked,   'Sample size: ' + p.sample_size + ' reviews',   '' ].join('\\n');})() }}"
             }
           ]
         }
@@ -113,14 +378,14 @@
       "type": "n8n-nodes-base.googleDocs",
       "typeVersion": 2,
       "position": [
-        448,
-        -96
+        1584,
+        432
       ],
-      "id": "d51bce26-9839-435b-9715-c78c8fff545f",
-      "name": "Update a document",
+      "id": "1aaa086b-3aba-4b65-bca0-70b37199440f",
+      "name": "Update a document1",
       "credentials": {
         "googleDocsOAuth2Api": {
-          "id": "PLACEHOLDER_GOOGLE_DOCS_CREDENTIAL_ID",
+          "id": "REPLACE_WITH_YOUR_GOOGLE_DOCS_CRED_ID",
           "name": "Google Docs account"
         }
       }
@@ -128,114 +393,166 @@
     {
       "parameters": {
         "resource": "draft",
-        "subject": "Groww \u2014 Customer Fee Explainer (DRAFT)",
-        "message": "=\n{{\n  \"INTERNAL DRAFT \u2014 NOT SENT\\n\\n\" +\n  JSON.parse($json.payload_json).explanation_bullets.map(b => \"\u2022 \" + b).join(\"\\n\") +\n  \"\\n\\nOfficial sources:\\n\" +\n  JSON.parse($json.payload_json).source_links.join(\"\\n\")\n}}\n",
+        "subject": "={{ 'Weekly Product Pulse + Customer Clarification — ' + JSON.parse($('Verify Persisted Approval').first().json.payload_json).date }}",
+        "message": "={{ (() => { const p = JSON.parse($('Verify Persisted Approval').first().json.payload_json); const rule = '='.repeat(60); return [   'INTERNAL DRAFT — NOT SENT', '',   rule, '1. WEEKLY PRODUCT PULSE', rule, '',   p.weekly_pulse, '',   rule, '2. CUSTOMER FEE EXPLANATION (reusable support snippet)', rule, '',   'Why a sell costs more than a buy:', '',   ...p.explanation_bullets.map(b => '  • ' + b), '',   'Official sources:',   ...p.source_links.map(u => '  ' + u), '',   'Last checked: ' + p.last_checked ].join('\\n');})() }}",
         "options": {}
       },
       "type": "n8n-nodes-base.gmail",
       "typeVersion": 2.2,
       "position": [
-        672,
-        0
+        2192,
+        1024
       ],
-      "id": "5d67ba2a-ea60-438b-a084-a3a755193d5e",
-      "name": "Create a draft",
+      "id": "12d52c60-f1ef-4284-8a7c-2a2cfd4d1fca",
+      "name": "Create a draft1",
+      "webhookId": "06d77fb4-fc72-47e7-a4cc-9d569f5d7687",
       "credentials": {
         "gmailOAuth2": {
-          "id": "PLACEHOLDER_GMAIL_CREDENTIAL_ID",
+          "id": "REPLACE_WITH_YOUR_GMAIL_CRED_ID",
           "name": "Gmail account"
         }
       }
     },
     {
       "parameters": {
-        "authentication": "bearerAuth",
-        "path": "PLACEHOLDER_MCP_WEBHOOK_PATH"
+        "type": "SHA256",
+        "value": "={{ $json.payload_json }}",
+        "dataPropertyName": "payload_hash"
       },
-      "type": "@n8n/n8n-nodes-langchain.mcpTrigger",
-      "typeVersion": 2.1,
+      "type": "n8n-nodes-base.crypto",
+      "typeVersion": 1,
       "position": [
-        0,
-        288
+        752,
+        272
       ],
-      "id": "98920482b0dd4042be1e1dc5c724b8c3",
-      "name": "MCP Server Trigger",
-      "credentials": {
-        "httpBearerAuth": {
-          "id": "PLACEHOLDER_BEARER_AUTH_CREDENTIAL_ID",
-          "name": "Bearer Auth account"
-        }
-      }
-    },
-    {
-      "parameters": {
-        "jsCode": "const crypto = require('crypto');\nconst input = $input.first().json;\nconst operation = String(input.operation ?? '').trim();\nconst runId = String(input.run_id ?? '').trim();\nconst payloadHash = String(input.payload_hash ?? '').trim();\nconst payloadJson = String(input.payload_json ?? '').trim();\nconst errors = [];\nif (!runId) errors.push('Missing run_id');\nif (!payloadHash) errors.push('Missing payload_hash');\nif (!payloadJson) errors.push('Missing payload_json');\nif (!operation) errors.push('Missing operation');\nlet computedHash = null;\ntry { computedHash = crypto.createHash('sha256').update(payloadJson).digest('hex'); } catch (e) { errors.push('Cannot compute payload hash: ' + e.message); }\nif (computedHash && computedHash !== payloadHash) errors.push('Payload hash mismatch \u2014 payload may have been altered');\nif (errors.length > 0) {\n  return [{ json: { authorized: false, errors, run_id: runId, operation: operation } }];\n}\nreturn [{ json: { authorized: true, errors: [], run_id: runId, operation: operation, payload_hash: payloadHash, payload_json: payloadJson, verified_at: new Date().toISOString() } }];"
-      },
-      "type": "n8n-nodes-base.code",
-      "typeVersion": 2,
-      "position": [
-        224,
-        0
-      ],
-      "id": "44f7ec4598854c18ab833943d3d916a2",
-      "name": "Verify Authorization"
+      "id": "c0169255-57f4-4e48-9b71-87ccf763df42",
+      "name": "Hash Incoming Payload"
     }
   ],
+  "pinData": {},
   "connections": {
-    "ef726097-e54c-40d7-954e-7d3065355e63": {
+    "When Executed by Another Workflow": {
       "main": [
         [
           {
-            "node": "44f7ec4598854c18ab833943d3d916a2",
+            "node": "Check Tool Inputs",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "98920482b0dd4042be1e1dc5c724b8c3": {
+    "Check Tool Inputs": {
       "main": [
         [
           {
-            "node": "44f7ec4598854c18ab833943d3d916a2",
+            "node": "Hash Incoming Payload",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "44f7ec4598854c18ab833943d3d916a2": {
+    "Get Approved Audit Record": {
       "main": [
         [
           {
-            "node": "524e64c9-29f0-4473-9897-51f06cda8065",
-            "type": "main",
-            "index": 0
-          },
-          {
-            "node": "4ea414cc-dcdc-4af9-b329-5225d45952a0",
+            "node": "Verify Persisted Approval",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "524e64c9-29f0-4473-9897-51f06cda8065": {
+    "Verify Persisted Approval": {
       "main": [
         [
           {
-            "node": "d51bce26-9839-435b-9715-c78c8fff545f",
+            "node": "If2",
             "type": "main",
             "index": 0
           }
         ]
       ]
     },
-    "4ea414cc-dcdc-4af9-b329-5225d45952a0": {
+    "Claim append_to_doc Once": {
       "main": [
         [
           {
-            "node": "5d67ba2a-ea60-438b-a084-a3a755193d5e",
+            "node": "Update a document1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Claim create_email_draft Once": {
+      "main": [
+        [
+          {
+            "node": "Create a draft1",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If2": {
+      "main": [
+        [
+          {
+            "node": "Claim append_to_doc Once",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "If3",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If3": {
+      "main": [
+        [
+          {
+            "node": "Claim create_email_draft Once",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Update a document1": {
+      "main": [
+        [
+          {
+            "node": "Mark append_to_doc Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Create a draft1": {
+      "main": [
+        [
+          {
+            "node": "Mark create_email_draft Done",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Hash Incoming Payload": {
+      "main": [
+        [
+          {
+            "node": "Get Approved Audit Record",
             "type": "main",
             "index": 0
           }
@@ -248,12 +565,11 @@
     "executionOrder": "v1",
     "binaryMode": "separate"
   },
-  "versionId": "35c4b58375a74a6280fee8df9fef44f2",
+  "versionId": "fe7c95b9-80ef-4403-9e7f-16f551b39ea7",
   "meta": {
-    "templateCredsSetupCompleted": true,
-    "instanceId": "placeholder"
+    "templateCredsSetupCompleted": true
   },
   "nodeGroups": [],
-  "id": "886564ff5beb48858efa35293cceb81d",
+  "id": "TEQi8qqevof4F319",
   "tags": []
 }
