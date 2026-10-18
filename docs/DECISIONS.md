@@ -15,14 +15,18 @@
 | D11 | No credentials, API keys, or secrets committed. `config/config.example.json` is a template only. Google Doc ID and Gmail credentials not requested until integration phase. | Working rules; least privilege. | Approved |
 | D12 | `.gitignore` excludes private raw data (`data/raw_reviews.csv`, `data/cleaned_reviews.csv`, `data/data_quality_report.json`), `state/`, `.env`; allows sanitized `data/reviews_sample.csv`, final Markdown reports (`outputs/`), docs, screenshots, and reviewed n8n workflow exports to be committed. | Separation of private/operational vs committable deliverables. | Approved |
 | D13 | `score` from google-play-scraper maps to `rating`; no per-review public URLs assumed or fabricated. Source provenance is the Google Play app page URL + `reviewId`. | Accurate field mapping; no invention. | Approved |
+| D14 | Phase 3.2 uses a fixed taxonomy of exactly 5 themes (T1-T5) with strict descriptions and assignment criteria. Maximum 2 themes per review. Fee subtype distinguished: fee-brokerage vs fee-other. Unclear/unclassified option available. | Requirement C: consistent, auditable theme labels across batches. | Approved |
+| D15 | Phase 3.2 initial test limited to 4 batches = 100 reviews. Full 1,000-review scale-up requires explicit user approval. | Controlled API usage, bounded risk, auditability. | Approved |
 
 ### Open items needing user input (integration phase only)
 1. Confirm initial owner account created via browser at `http://localhost:5678`.
-2. Gemini API key (supplied by user, never committed).
-3. Google Sheets connection details for storing cleaned data.
-4. Target existing Google Doc ID and Gmail draft destination (integration phase).
-5. Confirmation of supported Gemini model before implementation.
-6. n8n Data Tables or Google Sheets choice for persistence store.
+2. Approve Phase 3.2 100-review test (4 batches) before running in n8n.
+3. Gemini API key (supplied by user, never committed).
+4. Google Sheets connection details for storing cleaned data.
+5. Target existing Google Doc ID and Gmail draft destination (integration phase).
+6. Confirmation of supported Gemini model before implementation.
+7. n8n Data Tables or Google Sheets choice for persistence store.
+8. Approval to scale from 100-review test to full 1,000-review classification.
 
 ### Product configuration (confirmed — no longer open)
 - Product: Groww

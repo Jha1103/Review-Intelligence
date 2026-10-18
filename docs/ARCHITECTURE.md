@@ -21,13 +21,14 @@
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
 │ LAYER 2 — AI INTELLIGENCE (self-hosted n8n CE + Gemini)     │
-│  n8n reads Google Sheets                                    │
-│  Gemini: discover ≤5 themes, classify reviews,              │
-│          extract 3 verbatim quotes, detect recurring        │
-│          fee issue                                          │
-│  n8n Code nodes: deterministic frequencies, evidence        │
-│          validation, formatting rules                       │
-│  → themes.json, quotes, fee-issue evidence                  │
+│  Phase 3.1 — Pilot: 25-review classification (completed)     │
+│  Phase 3.2 — Scalable: 1,000-review classification           │
+│  • Fixed taxonomy (≤5 themes), batch generation (25/batch)   │
+│  • Gemini classification with structured JSON output         │
+│  • JavaScript validation per batch                           │
+│  • Theme frequency aggregation                               │
+│  n8n Code nodes: deterministic validation, aggregation       │
+│  → classified_reviews.json, theme_frequencies.json           │
 └─────────────────────────────────────────────────────────────┘
                               │
                               ▼
@@ -71,6 +72,7 @@
 |-------|---------------|------------|
 | Data Layer | Collect genuine Groww reviews; clean/dedupe/filter; export CSVs; load to Google Sheets | Python 3, pandas, google-play-scraper, Google Sheets API |
 | AI Intelligence Layer | Theme discovery (≤5), review classification, 3 verbatim quotes, recurring fee-issue detection | n8n CE (self-hosted), Gemini API |
+| Phase 3.2 Classification | Fixed taxonomy (≤5 themes), batch generation, Gemini classification, JavaScript validation, theme aggregation | n8n CE (self-hosted), Gemini API |
 | Deterministic Validation | Frequency counting (JavaScript), evidence validation, formatting rules | n8n Code nodes |
 | Output Layer | Pulse (≤250 words), fee explainer (≤6 bullets, 2 URLs, Last checked) | n8n + Gemini |
 | Human Approval | Form displays both outputs; explicit Approve/Reject; Reject = no writes | n8n CE form |

@@ -1,0 +1,186 @@
+{
+  "name": "Groww Review Classification Phase 3.2 (100-Review Test)",
+  "nodes": [
+    {
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [240, 300],
+      "parameters": {},
+      "webhookId": ""
+    },
+    {
+      "id": "get-reviews-from-sheets",
+      "name": "Get Reviews from Google Sheets",
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.2,
+      "position": [460, 300],
+      "parameters": {
+        "operation": "getAll",
+        "sheetId": "INSERT_YOUR_GOOGLE_SHEET_ID",
+        "range": "Sheet1!A:Z",
+        "returnAll": true
+      },
+      "credentials": {
+        "googleSheetsOAuth2Api": "INSERT_YOUR_GOOGLE_SHEETS_CREDENTIAL_ID"
+      }
+    },
+    {
+      "id": "validate-review-dataset",
+      "name": "Validate Review Dataset",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [680, 300],
+      "parameters": {
+        "jsCode": "// Existing validation node - do not modify\n// Validates that Google Sheets returned 1,000 reviews\nconst reviews = $input.first().json.reviews || $input.first().json;\nif (!Array.isArray(reviews) || reviews.length === 0) {\n  throw new Error('No reviews found in Google Sheets');\n}\nreturn [{ json: { review_count: reviews.length, reviews: reviews, validated: true, validated_at: new Date().toISOString() } }];",
+        "outputBinaryProperty": ""
+      }
+    },
+    {
+      "id": "generate-classification-batches",
+      "name": "Generate Classification Batches",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [900, 300],
+      "parameters": {
+        "jsCode": "// Phase 3.2 — Generate Classification Batches\\n\\nconst BATCH_SIZE = 25;\\nconst MAX_BATCHES_FOR_TEST = 4; // 4 x 25 = 100 reviews\\nconst RUN_ID = `run_${Date.now()}`;\\n\\n// Get the reviews array from input\\nconst inputJson = $input.first().json;\\nlet reviews = inputJson.reviews || inputJson.data?.reviews || inputJson;\\nif (!Array.isArray(reviews)) {\\n  reviews = [reviews];\\n}\\n\\n// Sort by review_id for deterministic ordering\\nreviews.sort((a, b) => (a.review_id || \\\"\\\").localeCompare(b.review_id || \\\"\\\"));\\n\\n// Generate batches\\nconst batches = [];\\nconst numBatches = Math.min(\\n  MAX_BATCHES_FOR_TEST,\\n  Math.ceil(reviews.length / BATCH_SIZE)\\n);\\n\\nfor (let i = 0; i < numBatches; i++) {\\n  const start = i * BATCH_SIZE;\\n  const end = Math.min(start + BATCH_SIZE, reviews.length);\\n  const batchReviews = reviews.slice(start, end);\\n  const batchId = `batch_${i + 1}_${String(Date.now()).slice(-6)}`;\\n\\n  batches.push({\\n    batch_id: batchId,\\n    batch_index: i + 1,\\n    run_id: RUN_ID,\\n    batch_size: BATCH_SIZE,\\n    review_count: batchReviews.length,\\n    review_ids: batchReviews.map(r => r.review_id),\\n    reviews: batchReviews,\\n    status: \\\"pending\\\",\\n    created_at: new Date().toISOString(),\\n  });\\n}\\n\\n// Return one item per batch\\nreturn batches.map(b => ({ json: b }));",
+        "outputBinaryProperty": ""
+      }
+    },
+    {
+      "id": "gemini-classify-batch",
+      "name": "Gemini Classify Batch",
+      "type": "n8n-nodes-base.googleGeminiAiModel",
+      "typeVersion": 1,
+      "position": [1120, 300],
+      "parameters": {
+        "operation": "chat",
+        "model": "gemini-1.5-flash",
+        "temperature": 0.1,
+        "maxOutputTokens": 4096,
+        "systemMessage": "You are a product analytics classifier for Groww. Classify each review into themes from the fixed taxonomy (T1-T5). Return valid JSON only. No markdown code fences. Maximum 2 themes per review. Fee subtype: fee-brokerage if 'brokerage' mentioned, fee-other if charges mentioned without 'brokerage', none if no fee theme. Sentiment: positive/negative/neutral. Multilingual (English/Hindi/Hinglish/Gujarati). Unclear reviews: themes [\\\"T5\\\"], sentiment \\\"neutral\\\", needs_manual_review true. Do not invent content.",
+        "prompt": "={{ $json.reviews | JSON.stringify }}",
+        "responseFormat": "json_array"
+      },
+      "credentials": {
+        "googleGeminiAiApi": "INSERT_YOUR_GEMINI_CREDENTIAL_ID"
+      }
+    },
+    {
+      "id": "validate-batch-classification",
+      "name": "Validate Batch Classification",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1340, 300],
+      "parameters": {
+        "jsCode": "// Phase 3.2 — Validate Batch Classification (JavaScript)\\n\\nconst VALID_THEME_IDS = [\\\"T1\\\", \\\"T2\\\", \\\"T3\\\", \\\"T4\\\", \\\"T5\\\"];\\nconst VALID_SENTIMENTS = [\\\"positive\\\", \\\"negative\\\", \\\"neutral\\\"];\\nconst VALID_FEE_TOPICS = [\\\"fee-brokerage\\\", \\\"fee-other\\\", \\\"none\\\"];\\nconst MAX_THEMES_PER_REVIEW = 2;\\n\\nconst errors = [];\\nconst warnings = [];\\nconst classifiedIds = [];\\n\\n// Get Gemini results\\nlet geminiResults = [];\\ntry {\\n  const geminiOutput = $input.first().json;\\n  if (geminiOutput.classifications) { geminiResults = geminiOutput.classifications; }\\n  else if (geminiOutput.results) { geminiResults = geminiOutput.results; }\\n  else if (Array.isArray(geminiOutput)) { geminiResults = geminiOutput; }\\n  else if (geminiOutput.content) { geminiResults = JSON.parse(geminiOutput.content); }\\n} catch (e) {\\n  errors.push(`Failed to parse Gemini response: ${e.message}`);\\n  return [{ json: { valid: false, errors, warnings, classified_ids: [] } }];\\n}\\n\\n// Get original review IDs\\nconst originalReviewIds = ($input.first().json.review_ids || []).map(String);\\nconst expectedIds = new Set(originalReviewIds);\\n\\n// Check record count\\nif (geminiResults.length !== expectedIds.size) {\\n  errors.push(`Record count mismatch: expected ${expectedIds.size} classifications, got ${geminiResults.length}`);\\n}\\n\\nconst seenIds = new Set();\\n\\nfor (let i = 0; i < geminiResults.length; i++) {\\n  const result = geminiResults[i];\\n  const rid = String(result.review_id || \\\"\\\");\\n\\n  if (seenIds.has(rid)) { errors.push(`Duplicate review ID: ${rid}`); continue; }\\n  seenIds.add(rid);\\n\\n  if (!expectedIds.has(rid)) { errors.push(`Unknown review ID: ${rid}`); continue; }\\n  classifiedIds.push(rid);\\n\\n  const themes = result.themes || [];\\n  if (!Array.isArray(themes)) { errors.push(`Review ${rid}: themes is not a list`); continue; }\\n  if (themes.length > MAX_THEMES_PER_REVIEW) {\\n    errors.push(`Review ${rid}: ${themes.length} themes, max ${MAX_THEMES_PER_REVIEW} allowed`);\\n  }\\n  const invalidThemes = themes.filter(t => !VALID_THEME_IDS.includes(t));\\n  if (invalidThemes.length > 0) { errors.push(`Review ${rid}: invalid themes ${JSON.stringify(invalidThemes)}`); }\\n\\n  const sentiment = result.sentiment || \\\"\\\";\\n  if (!VALID_SENTIMENTS.includes(sentiment)) { errors.push(`Review ${rid}: invalid sentiment '${sentiment}'`); }\\n\\n  const feeTopic = result.fee_topic || \\\"none\\\";\\n  if (!VALID_FEE_TOPICS.includes(feeTopic)) { errors.push(`Review ${rid}: invalid fee topic '${feeTopic}'`); }\\n\\n  const isFee = themes.includes(\\\"T1\\\");\\n  const hasFeeTopic = feeTopic !== \\\"none\\\";\\n  if (isFee !== hasFeeTopic) {\\n    warnings.push(`Review ${rid}: questionable fee-subtype claim, flagged for manual review`);\\n  }\\n}\\n\\nconst missingIds = [...expectedIds].filter(id => !seenIds.has(id));\\nfor (const rid of missingIds) { errors.push(`Review ${rid}: not classified`); }\\n\\nconst extraIds = [...seenIds].filter(id => !expectedIds.has(id));\\nfor (const rid of extraIds) { errors.push(`Review ${rid}: classified but not in input`); }\\n\\nconst valid = errors.length === 0;\\n\\nreturn [{ json: {\\n  valid,\\n  batch_id: $input.first().json.batch_id,\\n  batch_index: $input.first().json.batch_index,\\n  run_id: $input.first().json.run_id,\\n  errors,\\n  warnings,\\n  classified_review_ids: classifiedIds.sort(),\\n  missing_review_ids: missingIds.sort(),\\n  extra_review_ids: extraIds.sort(),\\n  classified_count: classifiedIds.length,\\n  input_count: expectedIds.size,\\n  gemini_results: geminiResults,\\n  validated_at: new Date().toISOString(),\\n} }];",
+        "outputBinaryProperty": ""
+      }
+    },
+    {
+      "id": "store-batch-results",
+      "name": "Store Batch Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1560, 300],
+      "parameters": {
+        "jsCode": "// Phase 3.2 — Store Batch Results\\n\\nconst validation = $input.first().json;\\n\\nconst storeRecord = {\\n  batch_id: validation.batch_id,\\n  batch_index: validation.batch_index,\\n  run_id: validation.run_id,\\n  status: validation.valid ? \\\"completed\\\" : \\\"failed\\\",\\n  review_count: validation.input_count,\\n  classified_count: validation.classified_count,\\n  error_count: validation.errors.length,\\n  warning_count: validation.warnings.length,\\n  classified_review_ids: validation.classified_review_ids,\\n  missing_review_ids: validation.missing_review_ids,\\n  questionable_fee_warnings: validation.warnings.filter(w => w.includes(\\\"questionable fee-subtype\\\")),\\n  validated_at: validation.validated_at,\\n  errors: validation.errors,\\n  warnings: validation.warnings,\\n};\\n\\nreturn [{ json: storeRecord }];",
+        "outputBinaryProperty": ""
+      }
+    },
+    {
+      "id": "aggregate-classification-results",
+      "name": "Aggregate Classification Results",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1780, 300],
+      "parameters": {
+        "jsCode": "// Phase 3.2 — Aggregate Classification Results\\n\\nconst VALID_THEME_IDS = [\\\"T1\\\", \\\"T2\\\", \\\"T3\\\", \\\"T4\\\", \\\"T5\\\"];\\nconst VALID_SENTIMENTS = [\\\"positive\\\", \\\"negative\\\", \\\"neutral\\\"];\\nconst VALID_FEE_TOPICS = [\\\"fee-brokerage\\\", \\\"fee-other\\\", \\\"none\\\"];\\n\\nconst allResults = [];\\nconst batchSummaries = [];\\n\\nfor (const item of $input.all()) {\\n  const json = item.json;\\n  if (json.gemini_results) { allResults.push(...json.gemini_results); }\\n  batchSummaries.push({\\n    batch_id: json.batch_id,\\n    batch_index: json.batch_index,\\n    status: json.status,\\n    review_count: json.review_count,\\n    classified_count: json.classified_count,\\n    error_count: json.error_count,\\n    warning_count: json.warning_count,\\n  });\\n}\\n\\nconst themeCounts = {};\\nVALID_THEME_IDS.forEach(tid => { themeCounts[tid] = 0; });\\n\\nconst sentimentCounts = {};\\nVALID_SENTIMENTS.forEach(s => { sentimentCounts[s] = 0; });\\n\\nconst feeTopicCounts = {};\\nVALID_FEE_TOPICS.forEach(ft => { feeTopicCounts[ft] = 0; });\\n\\nlet totalReviews = 0;\\nlet reviewsWithThemes = 0;\\nconst questionableFees = [];\\n\\nfor (const result of allResults) {\\n  totalReviews++;\\n  const themes = result.themes || [];\\n  const sentiment = result.sentiment || \\\"\\\";\\n  const feeTopic = result.fee_topic || \\\"none\\\";\\n\\n  if (themes.length > 0) {\\n    reviewsWithThemes++;\\n    for (const tid of themes) {\\n      if (themeCounts[tid] !== undefined) { themeCounts[tid]++; }\\n    }\\n  }\\n\\n  if (sentimentCounts[sentiment] !== undefined) { sentimentCounts[sentiment]++; }\\n  if (feeTopicCounts[feeTopic] !== undefined) { feeTopicCounts[feeTopic]++; }\\n\\n  const isFee = themes.includes(\\\"T1\\\");\\n  const hasFeeTopic = feeTopic !== \\\"none\\\";\\n  if (isFee !== hasFeeTopic) { questionableFees.push(result.review_id); }\\n}\\n\\nreturn [{ json: {\\n  run_id: $input.first().json.run_id || \\\"unknown\\\",\\n  scope: \\\"phase_3_2_initial_test\\\",\\n  total_reviews_classified: totalReviews,\\n  reviews_with_themes: reviewsWithThemes,\\n  batch_count: batchSummaries.length,\\n  batch_summaries: batchSummaries,\\n  theme_counts: themeCounts,\\n  sentiment_counts: sentimentCounts,\\n  fee_topic_counts: feeTopicCounts,\\n  questionable_fee_review_ids: questionableFees,\\n  questionable_fee_count: questionableFees.length,\\n  classification_complete: totalReviews > 0,\\n  aggregated_at: new Date().toISOString(),\\n  scope_labels: {\\n    pilot_25_reviews: \\\"separate_pilot_run\\\",\\n    initial_test_100_reviews: \\\"phase_3_2_initial_test\\\",\\n    full_1000_reviews: \\\"pending_scale_up_approval\\\",\\n  },\\n} }];",
+        "outputBinaryProperty": ""
+      }
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Get Reviews from Google Sheets",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Get Reviews from Google Sheets": {
+      "main": [
+        [
+          {
+            "node": "Validate Review Dataset",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Review Dataset": {
+      "main": [
+        [
+          {
+            "node": "Generate Classification Batches",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Generate Classification Batches": {
+      "main": [
+        [
+          {
+            "node": "Gemini Classify Batch",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Gemini Classify Batch": {
+      "main": [
+        [
+          {
+            "node": "Validate Batch Classification",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Batch Classification": {
+      "main": [
+        [
+          {
+            "node": "Store Batch Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Store Batch Results": {
+      "main": [
+        [
+          {
+            "node": "Aggregate Classification Results",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {},
+  "id": "phase-3-2-classification-workflow"
+}

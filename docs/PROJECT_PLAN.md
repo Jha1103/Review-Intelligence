@@ -77,10 +77,10 @@ review-pulse-m5/
 | Phase | Focus | Exit gate |
 |-------|-------|-----------|
 | 0 | Project setup: folder, git, planning docs, config template (Groww confirmed) | Docs reviewed |
-| 1 | **Data collection** (COMPLETED): Python + google-play-scraper, 12-week window, pagination, retries, dedup, PII redaction, CSV exports + quality report | Pipeline runs; 29 tests pass |
+| 1 | **Data collection** (COMPLETED): Python + google-play-scraper, 12-week window, pagination, retries, dedup, PII redaction, CSV exports + quality report | Pipeline runs; 40 tests pass |
 | 2 | **Load to Google Sheets**: upload `reviews_for_sheets.csv` to Google Sheets; verify write/read | Sheet populated |
-| 3 | **n8n AI intelligence**: read Sheets → Gemini theme discovery (≤5), classification, 3 verbatim quotes, fee-issue detection | Themes + quotes generated |
-| 4 | **n8n deterministic validation**: Code nodes (JavaScript) for frequencies, evidence, formatting | Validation passes |
+| 3 | **Phase 3.1 — AI Pilot** (COMPLETED): 25-review classification in n8n CE | Pilot returned 25 classifications |
+| 4 | **Phase 3.2 — Scalable Classification** (PLANNED): 1,000-review sample, fixed taxonomy, batch generation (25/batch), Gemini classification, JavaScript validation, theme aggregation | 100-review test (4 batches) ready |
 | 5 | **n8n output generation**: pulse (≤250 words) + fee explainer (≤6 bullets, 2 official URLs, Last checked) | Outputs generated |
 | 6 | **n8n human approval**: form displays both outputs; explicit Approve/Reject | Approval captured |
 | 7 | **n8n MCP publishing**: after approval only, append_to_doc + create_email_draft (no send) | Docs updated, draft created |

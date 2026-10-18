@@ -16,13 +16,25 @@ Status key: `Planned` / `Implemented` / `Verified`. All items start as `Planned`
 | J | After approval only: append structured dated entry to existing Google Doc; create Gmail draft with both outputs; never send. | `append_to_doc` writes runId, date, pulse + fee summary to the doc; `create_email_draft` creates draft only. | n8n run history shows draft created, no sent email; doc entry contains runId and date. | Planned |
 | K | Prevent unapproved actions and reduce duplicate writes with persisted run ID, approval state, and action status. | n8n Data Tables or Google Sheets persists runId, `approvalState`, per-action `status`; n8n refuses unless approved and action is `not_run`; retry + dedup handling. | Test: re-running approved flow skips `done` actions; rejected run performs no MCP calls. | Planned |
 | L | Produce README, source list (4–6 URLs), sample reviews CSV, Markdown pulse, fee explainer, workflow exports, screenshots, 3-minute demo script. | Shipped: `README.md`, `sources.md` (4–6 official URLs), `data/reviews_sample.csv`, `outputs/pulse.md`, `outputs/fee_explainer.md`, `n8n/review-pulse-workflow.json`, `screenshots/`, `demo_script.md`. | File-existence test; `sources.md` has 4–6 URLs; demo script ≤3 minutes read-through. | Planned |
+| M | Phase 3.2: Fixed taxonomy of ≤5 themes with strict descriptions and assignment criteria. | `src/taxonomy.py` defines T1-T5 with descriptions, criteria, examples, counter-examples. | Unit test asserts exactly 5 themes, valid structure. | Implemented |
+| N | Phase 3.2: Deterministic batch generation of 25 reviews/batch, max 4 batches (100 reviews) for initial test. | `src/batch_generator.py` sorts by review_id, splits into consecutive batches, no duplicates, deterministic batch IDs. | Unit test asserts no duplicate review IDs across batches, correct batch sizes, reproducibility. | Implemented |
+| O | Phase 3.2: Deterministic JavaScript validation per batch — every input classified once, no unknown/duplicate IDs, valid themes/sentiments/fee topics, correct counts, questionable fee-subtype flagged. | `src/batch_validator.py` (Python reference) + n8n Code node JavaScript. | Unit tests for missing/duplicate/unknown IDs, invalid themes/sentiments/fee topics, fee-topic consistency. | Implemented |
+| P | Phase 3.2: Theme frequency aggregation through JavaScript, one review at most once per theme, distinguishes pilot/initial-test/final counts. | `src/batch_validator.py` `aggregate_theme_frequencies()` + n8n Code node. | Unit test asserts correct theme counts, scope labels distinguish counts. | Implemented |
+| Q | Phase 3.2: Privacy protection — sanitized text only in prompts, redacted reviews not eligible for verbatim quotes. | `cleaned_review_text` only sent to Gemini; `quote_eligible=no` reviews classified but not quoted; `original_review_text` never in Google Sheets. | Unit test asserts quote_eligible preserved, no original_text in exports, PII flags preserved. | Implemented |
 
 ### Deliverables inventory
 - `README.md`
 - `sources.md` — 4–6 official source URLs
 - `data/reviews_sample.csv` — sanitized sample (no PII)
+- `data/analysis_sample.csv` — stratified 1,000-row sample for Gemini prototyping
+- `data/sampling_report.json` — sampling methodology and distributions
+- `src/taxonomy.py` — fixed theme taxonomy (T1-T5)
+- `src/batch_generator.py` — deterministic batch generation
+- `src/batch_validator.py` — batch validation and aggregation (Python reference)
+- `docs/GEMINI_CLASSIFICATION_PROMPT.md` — Gemini system prompt
+- `n8n/phase_3_2_workflow.json` — exported n8n CE workflow (Phase 3.2)
+- `n8n/phase_3_2_node_instructions.md` — node-by-node instructions
 - `outputs/pulse.md` — example weekly pulse
 - `outputs/fee_explainer.md` — example fee explainer
-- `n8n/review-pulse-workflow.json` — exported n8n CE workflow
 - `screenshots/` — captured during demo (placeholders until demo run)
 - `demo_script.md` — 3-minute demo script
