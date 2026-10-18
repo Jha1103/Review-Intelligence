@@ -24,10 +24,12 @@ from clean_reviews import (  # noqa: E402
     _normalize_whitespace,
     _parse_date,
     _redact_pii,
+    _redact_ticket_refs,
     clean_reviews,
     EMAIL_RE,
     PHONE_RE,
     PAN_RE,
+    TICKET_REF_RE,
 )
 from collect_reviews import _fetch_page  # noqa: E402 (test imports only)
 
@@ -204,6 +206,87 @@ def test_pii_no_false_positive_on_clean_text():
     redacted, was_redacted = _redact_pii(text)
     assert was_redacted is False
     assert redacted == text
+
+
+def test_pii_redaction_ticket_id_eight_digit():
+    """KYC review with an eight-digit ticket number is redacted."""
+    text = "KYC problem, ticket #12345678, support not responding"
+    redacted, was_redacted = _redact_pii(text)
+    assert was_redacted is True
+    assert "12345678" not in redacted
+    assert "[REDACTED]" in redacted
+    # The label is preserved for theme detection context
+    assert "ticket" in redacted.lower()
+
+
+def test_pii_redaction_complaint_id():
+    """Complaint ID with colon separator is redacted numerically."""
+    text = "Complaint ID: 87654321, lost money due to glitch"
+    redacted, was_redacted = _redact_pii(text)
+    assert was_redacted is True
+    assert "87654321" not in redacted
+    assert "Complaint ID:" in redacted  # label preserved
+
+
+def test_pii_redaction_reference_id():
+    """Reference ID with hash separator is redacted numerically."""
+    text = "ref#28105753 check immediately"
+    redacted, was_redacted = _redact_pii(text)
+    assert was_redacted is True
+    assert "28105753" not in redacted
+
+
+def test_pii_no_redact_prices():
+    """Ordinary prices and financial figures are NOT redacted."""
+    text = "Charged rs2000/- for SIP, brokerage 20 per order is too high"
+    redacted, was_redacted = _redact_pii(text)
+    assert was_redacted is False
+    assert redacted == text
+
+
+def test_pii_no_redact_short_numbers():
+    """Short numbers (less than 6 digits) are not redacted as ticket IDs."""
+    text = "Rating 5 stars, price 999, order 12345"
+    redacted, was_redacted = _redact_pii(text)
+    assert was_redacted is False
+    assert redacted == text
+
+
+def test_pii_quote_eligible_false_when_redacted():
+    """If PII redaction was required, quote_eligible must be false."""
+    now = datetime.now(timezone.utc).isoformat()
+    rows = [_make_row("r1", now, 1, "KYC issue ticket #12345678 not resolved")]
+
+    with tempfile.TemporaryDirectory() as tmp:
+        raw_path = os.path.join(tmp, "raw.csv")
+        _write_csv(raw_path, rows, list(rows[0].keys()))
+        result = _run_clean(rows, list(rows[0].keys()), tmpdir=tmp)
+
+    assert len(result["cleaned_rows"]) == 1
+    row = result["cleaned_rows"][0]
+    assert row["pii_redacted"] == "yes"
+    assert row["quote_eligible"] == "no"
+    # Original text preserved privately for audit
+    assert "12345678" in row["original_review_text"]
+    # Redacted text in cleaned field
+    assert "12345678" not in row["cleaned_review_text"]
+
+
+def test_ticket_ref_re_does_not_match_price():
+    """TICKET_REF_RE should not match ordinary price figures."""
+    assert TICKET_REF_RE.search("rs2000/-") is None
+    assert TICKET_REF_RE.search("₹20 brokerage") is None
+    assert TICKET_REF_RE.search("price 500") is None
+
+
+def test_ticket_ref_re_matches_contextual_ids():
+    """TICKET_REF_RE matches keyword + 6+ digit number patterns."""
+    assert TICKET_REF_RE.search("ticket #12345678") is not None
+    assert TICKET_REF_RE.search("Complaint ID: 87654321") is not None
+    assert TICKET_REF_RE.search("Complaint no: 27810090") is not None
+    assert TICKET_REF_RE.search("ticket number 28105753") is not None
+    assert TICKET_REF_RE.search("ref#28105753") is not None
+    assert TICKET_REF_RE.search("kyc ref 123456789") is not None
 
 
 def test_empty_review_handling():
@@ -504,6 +587,40 @@ def test_real_quote_eligible_count_matches_report():
         report = json.load(f)
     eligible_count = sum(1 for r in cleaned_rows if r.get("quote_eligible") == "yes")
     assert eligible_count == report.get("quote_eligible_reviews", 0)
+
+
+def test_real_ticket_ids_redacted_in_sheets():
+    """Known ticket/complaint IDs in real data are redacted in sheets export."""
+    if not os.path.exists(REAL_SHEETS):
+        pytest.skip("Real reviews_for_sheets.csv not present.")
+    _, rows = _load_real_csv(REAL_SHEETS)
+    # These specific ticket IDs were found in the raw data and must be redacted
+    known_ticket_ids = {"27810090", "28105753"}
+    for row in rows:
+        text = row.get("cleaned_review_text", "")
+        for tid in known_ticket_ids:
+            assert tid not in text, f"Ticket ID {tid} found in sheets export: {text!r}"
+        # Any row that was redacted should not be quote-eligible
+        if row.get("pii_redacted") == "yes":
+            assert row.get("quote_eligible") == "no", (
+                f"PII-redacted row {row['review_id']} marked quote-eligible"
+            )
+
+
+def test_real_no_original_text_in_sheets():
+    """Sheets export never contains original_review_text column."""
+    if not os.path.exists(REAL_SHEETS):
+        pytest.skip("Real reviews_for_sheets.csv not present.")
+    columns, _ = _load_real_csv(REAL_SHEETS)
+    assert "original_review_text" not in columns
+
+
+def test_real_no_original_text_in_sample():
+    """Analysis sample never contains original_review_text column."""
+    if not os.path.exists(REAL_SAMPLE):
+        pytest.skip("Real analysis_sample.csv not present.")
+    columns, _ = _load_real_csv(REAL_SAMPLE)
+    assert "original_review_text" not in columns
 
 
 def test_tests_do_not_alter_real_outputs():

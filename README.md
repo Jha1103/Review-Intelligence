@@ -33,10 +33,10 @@ Self-hosted n8n Community Edition is running at `/Users/swapniljha/n8n-groww/` (
 | Final cleaned reviews | 10,000 |
 | Date range | 2026-08-11 to 2026-10-16 |
 | Rating distribution | 1★:1,052 / 2★:162 / 3★:278 / 4★:823 / 5★:7,685 |
-| PII redactions | 4 reviews |
-| Quote-eligible reviews | 9,996 |
+| PII redactions | 12 reviews (emails, phones, PANs + contextual ticket/complaint/reference IDs) |
+| Quote-eligible reviews | 9,988 |
 | Collection limit | Stopped at 10,000-review safety cap (pagination did not end naturally) |
-| Tests | 29 passed, 0 failed |
+| Tests | 40 passed, 0 failed |
 
 ### Data Files
 
@@ -92,8 +92,32 @@ Override defaults via environment variables:
 GROWW_WEEKS_BACK=8 GROWW_MAX_REVIEWS=500 python -m src.collect_reviews
 ```
 
-## Security
-No API keys, OAuth secrets, or tokens are committed. Configure credentials in n8n CE and environment variables only. No local CLI approval for the final workflow. No local JSON files as authorization source for cloud MCP tools. Private raw data (`cleaned_reviews.csv` with original text) is never committed to GitHub.
+## PII Redaction Methodology
+
+The cleaning pipeline redacts personally identifiable information from
+`cleaned_review_text` before any external AI processing. Original
+`original_review_text` is preserved privately in `data/cleaned_reviews.csv`
+(gitignored, never committed) for audit purposes.
+
+### What is redacted
+| Pattern | Example | Redacted as |
+|---------|---------|-------------|
+| Email addresses | `user@example.com` | `[REDACTED]` |
+| Indian phone numbers | `9876543210` | `[REDACTED]` |
+| PAN-like patterns | `ABCDE1234F` | `[REDACTED]` |
+| Long account numbers (9–18 digits) | `1234567890123` | `[REDACTED]` |
+| UPI handles | `name@upi` | `[REDACTED]` |
+| Contextual ticket/complaint/reference IDs (keyword + 6+ digit number) | `Complaint no: 27810090`, `ticket #12345678`, `ref#28105753` | `Complaint no: [REDACTED]`, `ticket #[REDACTED]`, `ref#[REDACTED]` |
+
+### What is NOT redacted
+- Ordinary prices and financial figures (e.g. `rs2000/-`, `₹20`, `brokerage 500`) — these lack a ticket/complaint/reference keyword
+- Short numbers under 6 digits
+
+### Quote eligibility
+Reviews requiring PII redaction are marked `quote_eligible=no` and must not
+be used as verbatim quotes in the pulse or fee explainer. The original text
+is preserved privately for audit but never exported to Google Sheets or
+GitHub.
 
 ## n8n Self-Hosted Operations
 

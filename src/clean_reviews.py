@@ -5,7 +5,8 @@
 - Handles missing/invalid dates and ratings.
 - Removes empty reviews (without dropping short fee complaints).
 - Normalizes whitespace.
-- Redacts PII (emails, phones, PAN-like patterns) in cleaned_review_text only.
+- Redacts PII (emails, phones, PAN-like patterns, contextual ticket/
+  complaint/reference IDs) in cleaned_review_text only.
 - Preserves original_review_text privately; never writes PII to the public sample.
 - Tracks exclusion reasons without recording sensitive content.
 """
@@ -60,6 +61,22 @@ PAN_RE = re.compile(r"\b[A-Z]{5}[0-9]{4}[A-Z]{1}\b")  # PAN-like: ABCDE1234F
 ACCOUNT_RE = re.compile(r"\b\d{9,18}\b")  # long numeric sequences (possible account numbers)
 UPI_RE = re.compile(r"\b[A-Za-z0-9._-]+@[A-Za-z]+\b")  # UPI-style handles
 
+# Contextual reference/ticket identifiers: keyword + 6+ digit number.
+# Matches patterns like "ticket #12345678", "complaint ID: 87654321",
+# "complaint no: 27810090", "reference: 12345678", "support ticket 12345678",
+# "ticket number 28105753", "kyc ref 123456789".
+# Multi-word phrases are listed before their single-word prefixes so the
+# regex alternation matches the longest phrase first.
+# The label prefix (keyword + separator) is preserved; only the numeric
+# identifier is redacted, e.g. "Complaint no: 27810090" -> "Complaint no: [REDACTED]".
+# Ordinary prices and financial figures (e.g. "rs2000/-", "₹20",
+# "brokerage 500") are NOT redacted because they lack a
+# ticket/complaint/reference keyword.
+TICKET_REF_RE = re.compile(
+    r"(\b(?:complaint no|ticket number|ticket no|ticket id|complaint id|reference id|ref no|ticket|complaint|reference|ref|support|kyc)[\s:._#-]*)(\d{6,})\b",
+    re.IGNORECASE
+)
+
 PII_PATTERNS = [
     ("email", EMAIL_RE),
     ("phone", PHONE_RE),
@@ -71,8 +88,31 @@ PII_PATTERNS = [
 REDACTION_TOKEN = "[REDACTED]"
 
 
+def _redact_ticket_refs(text: str) -> tuple[str, bool]:
+    """Redact contextual ticket/complaint/reference IDs.
+
+    Redacts only the numeric identifier while preserving the label
+    (e.g. "Complaint no: 27810090" -> "Complaint no: [REDACTED]").
+    Returns (redacted_text, was_redacted).
+    """
+    if not text:
+        return text, False
+
+    def _replace_fn(match):
+        return match.group(1) + REDACTION_TOKEN
+
+    redacted, n = TICKET_REF_RE.subn(_replace_fn, text)
+    return redacted, n > 0
+
+
 def _redact_pii(text: str) -> tuple[str, bool]:
-    """Redact PII patterns from text. Returns (redacted_text, was_redacted)."""
+    """Redact PII patterns from text. Returns (redacted_text, was_redacted).
+
+    Standard patterns (email, phone, PAN, UPI, long account numbers) are
+    replaced entirely with [REDACTED]. Contextual ticket/complaint/reference
+    IDs are redacted numerically while preserving the label. Ordinary prices
+    and financial figures are not redacted.
+    """
     if not text:
         return text, False
     redacted = text
@@ -82,6 +122,10 @@ def _redact_pii(text: str) -> tuple[str, bool]:
         if n > 0:
             was_redacted = True
             redacted = new_text
+    # Contextual ticket/complaint/reference IDs: redact the number, keep the label
+    redacted, ticket_redacted = _redact_ticket_refs(redacted)
+    if ticket_redacted:
+        was_redacted = True
     return redacted, was_redacted
 
 
@@ -220,7 +264,9 @@ def clean_reviews(
         if was_redacted:
             pii_redacted_count += 1
 
-        # Quote eligibility: original text is PII-free and non-empty
+        # Quote eligibility: original text is PII-free and non-empty.
+        # If PII redaction was required, the review cannot be used as a
+        # verbatim quote (the original text would need modification).
         quote_eligible = not was_redacted and len(raw_text.strip()) > 0
 
         cleaned_rows.append(
