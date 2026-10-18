@@ -20,7 +20,7 @@
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ LAYER 2 — AI INTELLIGENCE (n8n Cloud + Gemini)              │
+│ LAYER 2 — AI INTELLIGENCE (self-hosted n8n CE + Gemini)     │
 │  n8n reads Google Sheets                                    │
 │  Gemini: discover ≤5 themes, classify reviews,              │
 │          extract 3 verbatim quotes, detect recurring        │
@@ -42,7 +42,7 @@
                               │
                               ▼
 ┌─────────────────────────────────────────────────────────────┐
-│ LAYER 4 — HUMAN APPROVAL (n8n Cloud form)                   │
+│ LAYER 4 — HUMAN APPROVAL (n8n CE form)                      │
 │  Display BOTH complete outputs                              │
 │  Explicit Approve / Reject decision                         │
 │  Reject → zero external writes                              │
@@ -70,10 +70,10 @@
 | Layer | Responsibility | Technology |
 |-------|---------------|------------|
 | Data Layer | Collect genuine Groww reviews; clean/dedupe/filter; export CSVs; load to Google Sheets | Python 3, pandas, google-play-scraper, Google Sheets API |
-| AI Intelligence Layer | Theme discovery (≤5), review classification, 3 verbatim quotes, recurring fee-issue detection | n8n Cloud, Gemini API |
+| AI Intelligence Layer | Theme discovery (≤5), review classification, 3 verbatim quotes, recurring fee-issue detection | n8n CE (self-hosted), Gemini API |
 | Deterministic Validation | Frequency counting (JavaScript), evidence validation, formatting rules | n8n Code nodes |
 | Output Layer | Pulse (≤250 words), fee explainer (≤6 bullets, 2 URLs, Last checked) | n8n + Gemini |
-| Human Approval | Form displays both outputs; explicit Approve/Reject; Reject = no writes | n8n Cloud form |
+| Human Approval | Form displays both outputs; explicit Approve/Reject; Reject = no writes | n8n CE form |
 | MCP Layer | `append_to_doc`, `create_email_draft` after approval only; no email send | n8n MCP Client Tool + MCP Server Trigger |
 | Persistence | Run IDs, approval decisions, payload hashes, action status; retry/dedup | n8n Data Tables or Google Sheets |
 
@@ -127,12 +127,13 @@ Persisted in n8n Data Tables or Google Sheets:
 
 n8n workflow reads this store before any MCP call; refuses unless `approvalState == "approved"` and the action status is `not_run`.
 
-## 6. Local vs n8n Cloud boundary
+## 6. Local vs self-hosted n8n CE boundary
 
 **Built locally (this repo):** Python collection/cleaning code, tests, config template, docs, sample data.
 
-**Configured manually in n8n Cloud (by user):**
-- n8n Cloud instance and credentials.
+**Configured manually in self-hosted n8n CE (by user):**
+- Self-hosted n8n CE instance at `http://localhost:5678` (Docker Compose, `~/n8n-groww/`)
+- Initial owner account created via browser (no placeholder password in compose)
 - Google Sheets connection (store cleaned dataset).
 - Gemini API credential in n8n.
 - n8n Form for human approval.
@@ -145,6 +146,6 @@ No code in this repository writes to Google or Gmail directly; all external writ
 
 ## 7. Security rules
 - No API keys, OAuth secrets, or tokens committed. `config/config.example.json` is a template only.
-- No local CLI approval for the final workflow; approval is an n8n Cloud form step.
+- No local CLI approval for the final workflow; approval is an n8n CE form step.
 - No local JSON files as the authorization source for cloud MCP tools.
 - No invented review data, output data, source URLs, screenshots, or execution results.

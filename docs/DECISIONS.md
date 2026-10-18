@@ -3,12 +3,12 @@
 | # | Decision | Rationale | Status |
 |---|----------|-----------|--------|
 | D1 | Product is **Groww** (confirmed). Package ID `com.nextbillion.groww`, country `in`, language `en`, 12-week review window. | User confirmed the product; no longer `[PRODUCT_NAME]` TBD. | Approved |
-| D2 | Architecture is **n8n-first**. Python is only for data collection, cleaning, and local validation/testing. n8n Cloud + Gemini handle AI intelligence, report generation, human approval, and MCP publishing. | Explicit user requirement. | Approved |
+| D2 | Architecture is **n8n-first**. Python is only for data collection, cleaning, and local validation/testing. n8n CE (self-hosted) + Gemini handle AI intelligence, report generation, human approval, and MCP publishing. | Explicit user requirement. | Approved |
 | D3 | Google Sheets stores the cleaned review dataset; n8n reads from Sheets. | Requirement: cleaned data persisted in a shared, n8n-accessible store. | Approved |
 | D4 | Theme discovery via Gemini; frequency ranking done programmatically with JavaScript in n8n Code nodes. Python + Pandas are for local data processing only. | Requirement C: programmatically calculated frequencies, auditable. | Approved |
 | D5 | Exactly 3 verbatim quotes, each bound to a real `reviewId`; quotes contain no PII. | Requirement C + G (PII handling). | Approved |
 | D6 | Fee-issue branch stops and requests manual review when <2 reviews support the issue. | Requirement D: never invent a fee issue. | Approved |
-| D7 | Human approval via n8n Cloud form displaying BOTH outputs; explicit Approve/Reject; Reject = zero external writes. No local CLI approval in final workflow. | Requirements H–K; prevents unapproved writes. | Approved |
+| D7 | Human approval via n8n CE form displaying BOTH outputs; explicit Approve/Reject; Reject = zero external writes. No local CLI approval in final workflow. | Requirements H–K; prevents unapproved writes. | Approved |
 | D8 | MCP tools `append_to_doc` and `create_email_draft` invoked only after approval; each independently verifies authorization; never send email. | Requirements I–J. | Approved |
 | D9 | Persistence in n8n Data Tables or Google Sheets (run IDs, approval decisions, payload hashes, action status). No local JSON files as authorization source for cloud MCP tools. | Requirement K; cloud-authorized state. | Approved |
 | D10 | PII redacted before external AI processing; exclusion log contains no PII; verbatim quotes only when PII-free. | Requirement G (PII handling). | Approved |
@@ -17,7 +17,7 @@
 | D13 | `score` from google-play-scraper maps to `rating`; no per-review public URLs assumed or fabricated. Source provenance is the Google Play app page URL + `reviewId`. | Accurate field mapping; no invention. | Approved |
 
 ### Open items needing user input (integration phase only)
-1. n8n Cloud instance URL and credentials.
+1. Confirm initial owner account created via browser at `http://localhost:5678`.
 2. Gemini API key (supplied by user, never committed).
 3. Google Sheets connection details for storing cleaned data.
 4. Target existing Google Doc ID and Gmail draft destination (integration phase).
