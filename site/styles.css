@@ -187,3 +187,24 @@ section{padding-top:70px;padding-bottom:60px}
 .canvas-wrap::-webkit-scrollbar-thumb{background:#344040;border-radius:20px}
 .canvas-hint{margin:-8px 0 18px;font:11px var(--mono);color:var(--muted)}
 @media(min-width:1200px){.canvas-hint{display:none}}
+
+/* ===================================================================
+   Deliverables — rendered from the generated deliverables.js
+   =================================================================== */
+.deliverable-tabs{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.deliverable-tab{border:1px solid var(--line);background:var(--card);color:#a6b8b2;border-radius:30px;padding:9px 18px;font-size:13px;font-weight:600;transition:all .2s}
+.deliverable-tab:hover{border-color:#43544c;color:var(--text)}
+.deliverable-tab.is-active{background:var(--accent);border-color:var(--accent);color:#101913}
+.deliverable-panel{border:1px solid var(--line);border-radius:16px;background:var(--card);padding:28px}
+.deliverable-meta{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:20px}
+.deliverable-lead{margin:0 0 16px;font-size:13px;line-height:1.75;color:#a6b8b2}
+.deliverable-lead strong{color:var(--text)}
+.deliverable-pre{margin:0;padding:20px;border:1px solid var(--line);border-radius:10px;background:#0f1617;color:#cdd9d4;font:13px/1.8 var(--font);white-space:pre-wrap;word-break:break-word;max-height:460px;overflow:auto}
+.deliverable-pre.deliverable-code{font:11px/1.7 var(--mono);color:#a6b8b2}
+.deliverable-bullets{margin:0;padding-left:20px;display:flex;flex-direction:column;gap:11px}
+.deliverable-bullets li{font-size:13px;line-height:1.75;color:#cdd9d4}
+.deliverable-sources{display:flex;gap:18px;flex-wrap:wrap;margin:20px 0 0;padding-top:16px;border-top:1px solid var(--line);font-size:12px}
+.deliverable-pre::-webkit-scrollbar{width:8px}
+.deliverable-pre::-webkit-scrollbar-track{background:#131b1c}
+.deliverable-pre::-webkit-scrollbar-thumb{background:#344040;border-radius:20px}
+@media(max-width:600px){.deliverable-panel{padding:20px}.deliverable-tab{padding:8px 14px;font-size:12px}}
