@@ -1,0 +1,259 @@
+{
+  "name": "Groww - Delivery Actions",
+  "nodes": [
+    {
+      "parameters": {
+        "workflowInputs": {
+          "values": [
+            {
+              "name": "operation"
+            },
+            {
+              "name": "run_id"
+            },
+            {
+              "name": "payload_hash"
+            },
+            {
+              "name": "payload_json"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.executeWorkflowTrigger",
+      "typeVersion": 1.3,
+      "position": [
+        0,
+        0
+      ],
+      "id": "ef726097-e54c-40d7-954e-7d3065355e63",
+      "name": "When Executed by Another Workflow"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "c3ed8eda",
+              "leftValue": "={ String($json.operation ?? '').trim() }",
+              "rightValue": "append_to_doc",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        224,
+        0
+      ],
+      "id": "524e64c9-29f0-4473-9897-51f06cda8065",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "8e13a9c2",
+              "leftValue": "={ String($json.operation ?? '').trim() }",
+              "rightValue": "create_email_draft",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        448,
+        96
+      ],
+      "id": "4ea414cc-dcdc-4af9-b329-5225d45952a0",
+      "name": "If1"
+    },
+    {
+      "parameters": {
+        "operation": "update",
+        "documentURL": "https://docs.google.com/document/d/1wD1D38D8Pej7BN7Sva_98BYafjwY4TiVR-K4whHMebI/edit?tab=t.0",
+        "actionsUi": {
+          "actionFields": [
+            {
+              "action": "insert",
+              "text": "={{ JSON.stringify(JSON.parse($json.payload_json), null, 2) + '\\n\\n' }}"
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.googleDocs",
+      "typeVersion": 2,
+      "position": [
+        448,
+        -96
+      ],
+      "id": "d51bce26-9839-435b-9715-c78c8fff545f",
+      "name": "Update a document",
+      "credentials": {
+        "googleDocsOAuth2Api": {
+          "id": "PLACEHOLDER_GOOGLE_DOCS_CREDENTIAL_ID",
+          "name": "Google Docs account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "resource": "draft",
+        "subject": "Groww \u2014 Customer Fee Explainer (DRAFT)",
+        "message": "=\n{{\n  \"INTERNAL DRAFT \u2014 NOT SENT\\n\\n\" +\n  JSON.parse($json.payload_json).explanation_bullets.map(b => \"\u2022 \" + b).join(\"\\n\") +\n  \"\\n\\nOfficial sources:\\n\" +\n  JSON.parse($json.payload_json).source_links.join(\"\\n\")\n}}\n",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.gmail",
+      "typeVersion": 2.2,
+      "position": [
+        672,
+        0
+      ],
+      "id": "5d67ba2a-ea60-438b-a084-a3a755193d5e",
+      "name": "Create a draft",
+      "credentials": {
+        "gmailOAuth2": {
+          "id": "PLACEHOLDER_GMAIL_CREDENTIAL_ID",
+          "name": "Gmail account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "authentication": "bearerAuth",
+        "path": "PLACEHOLDER_MCP_WEBHOOK_PATH"
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpTrigger",
+      "typeVersion": 2.1,
+      "position": [
+        0,
+        288
+      ],
+      "id": "98920482b0dd4042be1e1dc5c724b8c3",
+      "name": "MCP Server Trigger",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "PLACEHOLDER_BEARER_AUTH_CREDENTIAL_ID",
+          "name": "Bearer Auth account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst input = $input.first().json;\nconst operation = String(input.operation ?? '').trim();\nconst runId = String(input.run_id ?? '').trim();\nconst payloadHash = String(input.payload_hash ?? '').trim();\nconst payloadJson = String(input.payload_json ?? '').trim();\nconst errors = [];\nif (!runId) errors.push('Missing run_id');\nif (!payloadHash) errors.push('Missing payload_hash');\nif (!payloadJson) errors.push('Missing payload_json');\nif (!operation) errors.push('Missing operation');\nlet computedHash = null;\ntry { computedHash = crypto.createHash('sha256').update(payloadJson).digest('hex'); } catch (e) { errors.push('Cannot compute payload hash: ' + e.message); }\nif (computedHash && computedHash !== payloadHash) errors.push('Payload hash mismatch \u2014 payload may have been altered');\nif (errors.length > 0) {\n  return [{ json: { authorized: false, errors, run_id: runId, operation: operation } }];\n}\nreturn [{ json: { authorized: true, errors: [], run_id: runId, operation: operation, payload_hash: payloadHash, payload_json: payloadJson, verified_at: new Date().toISOString() } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        224,
+        0
+      ],
+      "id": "44f7ec4598854c18ab833943d3d916a2",
+      "name": "Verify Authorization"
+    }
+  ],
+  "connections": {
+    "ef726097-e54c-40d7-954e-7d3065355e63": {
+      "main": [
+        [
+          {
+            "node": "44f7ec4598854c18ab833943d3d916a2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "98920482b0dd4042be1e1dc5c724b8c3": {
+      "main": [
+        [
+          {
+            "node": "44f7ec4598854c18ab833943d3d916a2",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "44f7ec4598854c18ab833943d3d916a2": {
+      "main": [
+        [
+          {
+            "node": "524e64c9-29f0-4473-9897-51f06cda8065",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "4ea414cc-dcdc-4af9-b329-5225d45952a0",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "524e64c9-29f0-4473-9897-51f06cda8065": {
+      "main": [
+        [
+          {
+            "node": "d51bce26-9839-435b-9715-c78c8fff545f",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "4ea414cc-dcdc-4af9-b329-5225d45952a0": {
+      "main": [
+        [
+          {
+            "node": "5d67ba2a-ea60-438b-a084-a3a755193d5e",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "35c4b58375a74a6280fee8df9fef44f2",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "placeholder"
+  },
+  "nodeGroups": [],
+  "id": "886564ff5beb48858efa35293cceb81d",
+  "tags": []
+}

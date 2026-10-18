@@ -2,240 +2,13 @@
   'use strict';
 
   // ---------------------------------------------------------------------------
-  // Verified execution evidence (sanitized, no credentials or private data)
+  // Demo data (sanitized, no credentials or private data)
+  // All data derived from verified local n8n executions. No invented data.
   // ---------------------------------------------------------------------------
-  const EVIDENCE = {
-    reject: {
-      runId: 'execution_26',
-      scenario: 'reject',
-      title: 'Reject — zero external writes',
-      description: 'Approval gate returned Reject. Workflow stopped before the MCP Client. append_to_doc: not invoked. create_email_draft: not invoked. Google Docs: unchanged. Gmail: no draft created.',
-      meta: ['scenario: reject', 'external writes: 0', 'audit: blocked'],
-      stoppedAtNode: 'Wait (human approval)',
-    },
-    approve: {
-      runId: 'groww_27',
-      scenario: 'approve',
-      title: 'Approve — full delivery',
-      description: 'Approval gate returned Approve. MCP Client invoked append_to_doc (Execution #30) then create_email_draft via Gmail-only recovery. Both actions completed successfully.',
-      meta: ['scenario: approve', 'doc_status: done', 'draft_status: done', 'email sent: no'],
-    },
-  };
-
-  // MCP tool records (sanitized)
-  const MCP_RECORDS = {
-    append_to_doc: {
-      tool: 'append_to_doc',
-      operation: 'update',
-      auth: 'bearerAuth (n8n credential)',
-      request: JSON.stringify(
-        {
-          documentId: 'REDACTED_DOC_ID',
-          action: 'insert',
-          text: '{{ JSON.stringify(JSON.parse($json.payload_json), null, 2) + "\\n\\n" }}',
-        },
-        null,
-        2
-      ),
-      response: JSON.stringify(
-        {
-          status: 'success',
-          doc_status: 'done',
-          entry_appended: true,
-          dated_entry: true,
-        },
-        null,
-        2
-      ),
-      audit: 'Verified — append_to_doc (Execution #30) then Mark Done (Execution #31)',
-    },
-    create_email_draft: {
-      tool: 'create_email_draft',
-      operation: 'create (draft only, never send)',
-      auth: 'bearerAuth (n8n credential)',
-      request: JSON.stringify(
-        {
-          resource: 'draft',
-          subject: 'Groww — Customer Fee Explainer (DRAFT)',
-          body: 'INTERNAL DRAFT — NOT SENT — weekly pulse + fee explainer',
-        },
-        null,
-        2
-      ),
-      response: JSON.stringify(
-        {
-          status: 'success',
-          draft_status: 'done',
-          draft_created: true,
-          email_sent: false,
-        },
-        null,
-        2
-      ),
-      audit: 'Verified — Gmail-only recovery created one unsent draft',
-    },
-  };
-
-  // ---------------------------------------------------------------------------
-  // Workflow node definitions
-  // ---------------------------------------------------------------------------
-  const NODES = [
-    {
-      id: 'sheets',
-      label: 'Google Sheets',
-      sub: 'Get row(s) in sheet',
-      icon: '☷',
-      x: 60,
-      y: 210,
-    },
-    {
-      id: 'validate',
-      label: 'Validate Review Dataset',
-      sub: 'Code — 1,000 reviews',
-      icon: '✦',
-      x: 270,
-      y: 210,
-    },
-    {
-      id: 'batches',
-      label: 'Generate Batches',
-      sub: '4 × 25 reviews',
-      icon: '📦',
-      x: 480,
-      y: 210,
-    },
-    {
-      id: 'gemini',
-      label: 'Gemini Classification',
-      sub: 'Message a model',
-      icon: '✦',
-      x: 690,
-      y: 210,
-    },
-    {
-      id: 'validate2',
-      label: 'Validate Classifications',
-      sub: 'Code — deterministic checks',
-      icon: '✦',
-      x: 900,
-      y: 210,
-    },
-    {
-      id: 'generate',
-      label: 'Product Pulse + Fee Explainer',
-      sub: 'Gemini drafts',
-      icon: '📝',
-      x: 60,
-      y: 340,
-    },
-    {
-      id: 'format',
-      label: 'Format & Validate',
-      sub: 'Code — ≤250 words / ≤6 bullets',
-      icon: '✦',
-      x: 270,
-      y: 340,
-    },
-    {
-      id: 'wait',
-      label: 'Human Approval',
-      sub: 'Wait form — Approve / Reject',
-      icon: '⏸',
-      x: 480,
-      y: 340,
-      approval: true,
-    },
-    {
-      id: 'gate',
-      label: 'Approval Gate',
-      sub: 'If — Approve / Reject',
-      icon: '🚦',
-      x: 690,
-      y: 340,
-    },
-    {
-      id: 'compute',
-      label: 'Compute Approval Record',
-      sub: 'Code — SHA-256 hash',
-      icon: '🔐',
-      x: 900,
-      y: 340,
-    },
-    {
-      id: 'mcpClient',
-      label: 'MCP Client — Delivery Actions',
-      sub: 'append_to_doc / create_email_draft',
-      icon: '⇄',
-      x: 60,
-      y: 450,
-      mcp: true,
-    },
-    {
-      id: 'mcpServer',
-      label: 'MCP Server Trigger',
-      sub: 'Authenticated tools',
-      icon: '🔌',
-      x: 270,
-      y: 450,
-      mcp: true,
-    },
-    {
-      id: 'googleDocs',
-      label: 'Google Docs',
-      sub: 'Append structured entry',
-      icon: '📄',
-      x: 480,
-      y: 450,
-    },
-    {
-      id: 'gmail',
-      label: 'Gmail Draft',
-      sub: 'Create draft — never send',
-      icon: '✉',
-      x: 690,
-      y: 450,
-    },
-  ];
-
-  // ---------------------------------------------------------------------------
-  // Scenario definitions (step sequences)
-  // ---------------------------------------------------------------------------
-  const SCENARIOS = {
-    reject: {
-      id: 'reject',
-      steps: [
-        'sheets', 'validate', 'batches', 'gemini', 'validate2', 'generate', 'format', 'wait', 'gate',
-      ],
-      stoppedAt: 'gate',
-      finalNode: 'gate',
-    },
-    approve: {
-      id: 'approve',
-      steps: [
-        'sheets', 'validate', 'batches', 'gemini', 'validate2', 'generate', 'format', 'wait', 'gate', 'compute', 'mcpClient', 'mcpServer', 'googleDocs', 'gmail',
-      ],
-      stoppedAt: 'gmail',
-      finalNode: 'gmail',
-    },
-  };
-
-  // ---------------------------------------------------------------------------
-  // State
-  // ---------------------------------------------------------------------------
-  let state = {
-    scenario: null,
-    currentStepIndex: -1,
-    isPlaying: false,
-    isPaused: false,
-    speed: 1.5,
-    nodeStates: {},
-    animationTimer: null,
-  };
-
-  // Initialize node states
-  NODES.forEach((n) => {
-    state.nodeStates[n.id] = 'idle';
-  });
+  const EVIDENCE = window.DEMO_DATA.EVIDENCE;
+  const MCP_RECORDS = window.DEMO_DATA.MCP_RECORDS;
+  const NODES = window.DEMO_DATA.NODES;
+  const SCENARIOS = window.DEMO_DATA.SCENARIOS;
 
   // ---------------------------------------------------------------------------
   // DOM elements
@@ -264,6 +37,27 @@
     canvasBadge: document.getElementById('canvas-badge'),
   };
 
+  // Inspector tab elements (lazy-loaded)
+  let inspectorTabs, inspectorTabPanels;
+
+  // ---------------------------------------------------------------------------
+  // State
+  // ---------------------------------------------------------------------------
+  let state = {
+    scenario: null,
+    currentStepIndex: -1,
+    isPlaying: false,
+    isPaused: false,
+    speed: 1.5,
+    nodeStates: {},
+    animationTimer: null,
+  };
+
+  // Initialize node states
+  NODES.forEach((n) => {
+    state.nodeStates[n.id] = 'idle';
+  });
+
   // ---------------------------------------------------------------------------
   // Render workflow canvas
   // ---------------------------------------------------------------------------
@@ -271,7 +65,6 @@
     els.workflowNodes.innerHTML = '';
     els.workflowSvg.innerHTML = '';
 
-    // Draw connection lines
     const drawLine = (x1, y1, x2, y2) => {
       const line = document.createElementNS('http://www.w3.org/2000/svg', 'line');
       line.setAttribute('x1', x1 + 85);
@@ -285,9 +78,7 @@
       return line;
     };
 
-    // Horizontal connections
     const hConn = (x1, x2, y) => drawLine(x1, y, x2, y);
-    // Vertical connections
     const vConn = (x, y1, y2) => drawLine(x, y1, x, y2);
 
     // Row 1 horizontal chain
@@ -309,7 +100,6 @@
     vConn(60 + 85, 210 + 95, 340);
     vConn(480 + 85, 340 + 95, 450);
 
-    // Render nodes
     NODES.forEach((node) => {
       const el = document.createElement('div');
       el.className = `workflow-node ${state.nodeStates[node.id] || 'idle'}${node.mcp ? ' mcp' : ''}${node.approval ? ' approval' : ''}`;
@@ -327,6 +117,13 @@
       `;
 
       el.addEventListener('click', () => selectNode(node.id));
+      el.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          selectNode(node.id);
+        }
+      });
+      el.tabIndex = 0;
       els.workflowNodes.appendChild(el);
     });
   }
@@ -346,7 +143,6 @@
   }
 
   function selectNode(id) {
-    // Clear previous selection
     document.querySelectorAll('.workflow-node').forEach((el) => el.classList.remove('selected'));
     const el = document.getElementById(`node-${id}`);
     if (el) el.classList.add('selected');
@@ -354,7 +150,6 @@
     const meta = getNodeMeta(id);
     const stateVal = state.nodeStates[id] || 'idle';
 
-    // Populate inspector
     els.inspectorToolName.textContent = meta.label || '—';
     els.inspectorToolDisplay.textContent = meta.sub || '—';
     els.inspectorOperation.textContent = stateVal;
@@ -406,23 +201,19 @@
     els.canvasBadge.textContent = scenarioId.toUpperCase();
     els.timelineLabel.textContent = `Scenario: ${ev.title}`;
 
-    // Highlight selected scenario card
     document.querySelectorAll('.scenario-card').forEach((c) => c.classList.remove('selected'));
     document.getElementById(`scenario-${scenarioId}`).classList.add('selected');
 
-    // Enable controls
     els.btnPlay.disabled = false;
     els.btnPause.disabled = true;
     els.btnRestart.disabled = false;
 
-    // Start at first node
     advanceToNext();
   }
 
   function advanceToNext() {
     if (!state.scenario) return;
     if (state.currentStepIndex >= state.scenario.steps.length - 1) {
-      // Finished
       state.isPlaying = false;
       updateControls();
       els.timelineLabel.textContent = 'Execution complete';
@@ -436,13 +227,11 @@
     setNodeState(nodeId, 'running');
     selectNode(nodeId);
 
-    // Scroll node into view
     const el = document.getElementById(`node-${nodeId}`);
     if (el) el.scrollIntoView({ behavior: 'smooth', block: 'center', inline: 'center' });
 
     els.timelineLabel.textContent = `Executing: ${meta.label}`;
 
-    // Auto-advance after delay
     const delay = Math.max(600, 1200 / state.speed);
     state.animationTimer = setTimeout(() => {
       setNodeState(nodeId, 'done');
@@ -483,7 +272,6 @@
   els.scenarioApprove.addEventListener('click', () => startScenario('approve'));
 
   els.btnRunDemo.addEventListener('click', () => {
-    // Default to approve scenario when clicking hero button
     startScenario('approve');
   });
 
@@ -503,6 +291,32 @@
 
   els.speedSelect.addEventListener('change', () => {
     state.speed = parseFloat(els.speedSelect.value);
+  });
+
+  // Keyboard navigation
+  document.addEventListener('keydown', (e) => {
+    // Only handle when focus is not inside an input/textarea/select
+    if (e.target.tagName.match(/^(INPUT|TEXTAREA|SELECT)$/i)) return;
+
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      e.preventDefault();
+      const isReject = e.key === 'ArrowLeft';
+      const targetId = isReject ? 'scenario-reject' : 'scenario-approve';
+      const btn = document.getElementById(targetId);
+      if (btn) {
+        btn.classList.add('selected');
+        const otherId = isReject ? 'scenario-approve' : 'scenario-reject';
+        document.getElementById(otherId).classList.remove('selected');
+        startScenario(isReject ? 'reject' : 'approve');
+      }
+    }
+
+    if (e.key === ' ') {
+      e.preventDefault();
+      if (!state.scenario) return;
+      if (state.animationTimer) clearTimeout(state.animationTimer);
+      playPause();
+    }
   });
 
   // Initialize

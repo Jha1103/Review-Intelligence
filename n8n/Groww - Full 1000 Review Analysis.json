@@ -1,0 +1,395 @@
+{
+  "name": "Groww - Full 1000 Review Analysis",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [
+        -160,
+        -96
+      ],
+      "id": "29f02fde-0fd6-4ead-949b-286320b5080f",
+      "name": "When clicking \u2018Execute workflow\u2019"
+    },
+    {
+      "parameters": {
+        "documentId": {
+          "__rl": true,
+          "value": "188TagFUnsS6axSQtWXu4JzeKRpCqqA4BLbfUsCd1OJA",
+          "mode": "list",
+          "cachedResultName": "Groww Review Intelligence - M5",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/188TagFUnsS6axSQtWXu4JzeKRpCqqA4BLbfUsCd1OJA/edit?usp=drivesdk"
+        },
+        "sheetName": {
+          "__rl": true,
+          "value": 1844165641,
+          "mode": "list",
+          "cachedResultName": "analysis_sample",
+          "cachedResultUrl": "https://docs.google.com/spreadsheets/d/188TagFUnsS6axSQtWXu4JzeKRpCqqA4BLbfUsCd1OJA/edit#gid=1844165641"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.googleSheets",
+      "typeVersion": 4.7,
+      "position": [
+        64,
+        -96
+      ],
+      "id": "9d59781a-779c-401c-be53-9a90ccd4f254",
+      "name": "Get row(s) in sheet",
+      "credentials": {
+        "googleSheetsOAuth2Api": {
+          "id": "zIajPliIebUpRaIC",
+          "name": "Google Sheets account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst rows = $input.all().map(item => item.json);\n\nif (rows.length !== 1000) {\n  throw new Error(\n    `Expected 1000 reviews, received ${rows.length}`\n  );\n}\n\nconst required = [\n  \"review_id\",\n  \"review_date\",\n  \"rating\",\n  \"cleaned_review_text\",\n  \"source\",\n  \"quote_eligible\"\n];\n\nfor (const field of required) {\n  if (!Object.hasOwn(rows[0], field)) {\n    throw new Error(`Missing required column: ${field}`);\n  }\n}\n\nconst ids = new Set();\nlet duplicateIds = 0;\nlet invalidRows = 0;\n\nfor (const row of rows) {\n  const id = String(row.review_id ?? \"\").trim();\n  const rating = String(row.rating ?? \"\").trim();\n  const text = String(row.cleaned_review_text ?? \"\").trim();\n  const date = new Date(row.review_date);\n\n  if (!id || !text || !/^[1-5]$/.test(rating) || !Number.isFinite(date.getTime())) {\n    invalidRows++;\n    continue;\n  }\n\n  if (ids.has(id)) {\n    duplicateIds++;\n  }\n  ids.add(id);\n}\n\nif (duplicateIds > 0 || invalidRows > 0) {\n  throw new Error(\n    `Validation failed: ${duplicateIds} duplicates, ` +\n    `${invalidRows} invalid rows`\n  );\n}\n\nreturn [{\n  json: {\n    product: \"Groww\",\n    reviews_received: rows.length,\n    unique_review_ids: ids.size,\n    duplicate_ids: duplicateIds,\n    invalid_rows: invalidRows,\n    validation_passed: true,\n    validated_at: new Date().toISOString(),\n  },\n}];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        288,
+        -96
+      ],
+      "id": "191603ec-5562-4f23-875b-b0af2407684a",
+      "name": "Validate Review Dataset"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst validation = $input.first().json;\n\nif (validation.validation_passed !== true) {\n  throw new Error(\"Dataset validation must pass first\");\n}\n\nconst rows = $(\"Get row(s) in sheet\")\n  .all()\n  .map(item => item.json);\n\nif (rows.length !== 1000) {\n  throw new Error(`Expected 1000 reviews, got ${rows.length}`);\n}\n\nconst ids = new Set();\n\nfor (const row of rows) {\n  const id = String(row.review_id ?? \"\");\n  if (!id || !String(row.cleaned_review_text ?? \"\").trim()) {\n    throw new Error(\"Missing review ID or review text\");\n  }\n  if (ids.has(id)) {\n    throw new Error(`Duplicate review ID: ${id}`);\n  }\n  if (\"original_review_text\" in row) {\n    throw new Error(\"Private original review text found\");\n  }\n  ids.add(id);\n}\n\nrows.sort((a, b) => String(a.review_id).localeCompare(String(b.review_id)));\n\nconst BATCH_SIZE = 25;\nconst TOTAL_BATCHES = 4;\nconst runId = `groww_100_test_${Date.now()}`;\n\nconst batches = [];\nfor (let i = 0; i < TOTAL_BATCHES; i++) {\n  const subset = rows.slice(i * BATCH_SIZE, (i + 1) * BATCH_SIZE);\n  const reviews = subset.map(r => ({\n    review_id: String(r.review_id),\n    review_date: String(r.review_date),\n    rating: Number(r.rating),\n    cleaned_review_text: String(r.cleaned_review_text),\n    quote_eligible: String(r.quote_eligible),\n    pii_redacted: String(r.pii_redacted)\n  }));\n  batches.push({\n    json: {\n      run_id: runId,\n      batch_id: `test_batch_${i + 1}`,\n      batch_index: i + 1,\n      review_count: 25,\n      review_ids: reviews.map(r => r.review_id),\n      reviews,\n      scope: \"phase_3_2_initial_test\",\n      source_dataset: \"analysis_sample_1000\"\n    },\n    pairedItem: { item: { mode: \"passThrough\" } },\n  });\n}\nreturn batches;"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        512,
+        -96
+      ],
+      "id": "b4482b30-e207-4150-a8c1-79979a066c0e",
+      "name": "Generate 100 Review Test Batches"
+    },
+    {
+      "parameters": {
+        "modelId": {
+          "__rl": true,
+          "value": "models/gemini-3.1-flash-lite-preview",
+          "mode": "list",
+          "cachedResultName": "Gemini 3.1 Flash Lite Preview"
+        },
+        "messages": {
+          "values": [
+            {
+              "content": "=You are a Product Feedback Analyst for Groww.\nClassify each review into themes T1-T5.\nReturn ONLY valid JSON: {\"batch_id\": \"...\", \"classifications\": [{...}]}\nBATCH ID: {{ $json.batch_id }}\nREVIEWS: {{ JSON.stringify($json.reviews) }}"
+            }
+          ]
+        },
+        "jsonOutput": true,
+        "builtInTools": {},
+        "options": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.googleGemini",
+      "typeVersion": 1.2,
+      "position": [
+        736,
+        -96
+      ],
+      "id": "1e716765-beb4-47de-b01d-f459bee3aeeb",
+      "name": "Message a model",
+      "retryOnFail": true,
+      "waitBetweenTries": 2000,
+      "credentials": {
+        "googlePalmApi": {
+          "id": "PLACEHOLDER_GEMINI_CREDENTIAL_ID",
+          "name": "Google Gemini API account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst responses = $input.all();\nif (responses.length !== 4) throw new Error(\"Expected 4 Gemini responses\");\nconst expectedIds = new Set();\nconst seenIds = new Set();\nconst allowedThemes = new Set([\"T1\",\"T2\",\"T3\",\"T4\",\"T5\"]);\nconst allowedSentiments = new Set([\"positive\",\"negative\",\"neutral\",\"mixed\",\"unclear\"]);\nconst allowedFees = new Set([\"brokerage\",\"dp_charges\",\"other_fee\",\"unspecified_fee\",\"none\",\"unclear\"]);\nconst themeCounts = {T1:0,T2:0,T3:0,T4:0,T5:0};\n\nfor (const item of responses) {\n  const text = item.json.content?.parts?.map(p => p.text ?? \"\").join(\"\");\n  if (!text) throw new Error(\"Missing Gemini response text\");\n  const result = JSON.parse(text.trim().replace(/^```json\\s*/i,\"\").replace(/\\s*```$/,\"\"));\n  if (!Array.isArray(result.classifications) || result.classifications.length !== 25) {\n    throw new Error(\"Batch does not contain 25 classifications\");\n  }\n  for (const c of result.classifications) {\n    if (!expectedIds.has(c.review_id)) throw new Error(`Unknown review ID ${c.review_id}`);\n    if (seenIds.has(c.review_id)) throw new Error(`Duplicate review ID ${c.review_id}`);\n    seenIds.add(c.review_id);\n    for (const t of c.theme_ids || []) {\n      if (!allowedThemes.has(t)) throw new Error(`Invalid theme ${t}`);\n      themeCounts[t]++;\n    }\n    if (!allowedSentiments.has(c.sentiment)) throw new Error(`Invalid sentiment ${c.sentiment}`);\n    if (!allowedFees.has(c.fee_topic)) throw new Error(`Invalid fee topic ${c.fee_topic}`);\n  }\n}\nreturn [{ json: { total_classified: seenIds.size, theme_counts: themeCounts, validation_passed: true } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1072,
+        -96
+      ],
+      "id": "715c7241-2964-4aae-be1c-0cf8f051e01f",
+      "name": "Validate and Count 100 Reviews"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst d = $input.first().json;\nreturn [{ json: {\n  weekly_pulse: d.weekly_pulse || \"\",\n  explanation_bullets: d.explanation_bullets || [],\n  source_links: d.source_links || [],\n  last_checked: d.last_checked || new Date().toISOString(),\n  approval_status: \"pending\",\n  quote_verification_pending: true,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1280,
+        -96
+      ],
+      "id": "9c5b40d1-d8fc-4fd1-b859-a63029eb59f6",
+      "name": "Generate Product Pulse and Fee Explainer"
+    },
+    {
+      "parameters": {
+        "jsCode": "\nconst raw = $input.first().json.content?.parts?.[0]?.text;\nif (!raw) throw new Error(\"Missing Gemini draft output\");\nconst draft = JSON.parse(raw);\nconst words = draft.weekly_pulse.trim().split(/\\s+/).length;\nif (words > 250 || draft.explanation_bullets.length > 6) {\n  throw new Error(\"Report length limits exceeded\");\n}\nreturn [{ json: draft }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        1616,
+        -96
+      ],
+      "id": "71066213-1f1b-4042-80a1-4425d31f5b66",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "resume": "form",
+        "formTitle": "Groww \u2014 Review Both Drafts",
+        "formDescription": "Review both reports. Approve only after checking the three quotations.",
+        "formFields": {
+          "values": [
+            {
+              "fieldType": "html",
+              "elementName": "=Draft Preview",
+              "html": "{{ (() => {\n  const d = $json;\n  const safe = value => String(value ?? \"\").replace(/&/g,\"&amp;\").replace(/</g,\"&lt;\").replace(/>/g,\"&gt;\").replace(/\"/g,\"&quot;\");\n  const pulse = safe(d.weekly_pulse).replace(/\\n/g,\"<br>\");\n  const bullets = d.explanation_bullets.map(b => `<li>${safe(b)}</li>`).join(\"\");\n  const links = d.source_links.map(u => `<li><a href=\"${safe(u)}\">${safe(u)}</a></li>`).join(\"\");\n  return `<h3>1. Weekly Product Pulse</h3><p>${pulse}</p><hr><h3>2. Customer Support Fee Explainer</h3><ul>${bullets}</ul><h4>Official sources</h4><ul>${links}</ul>`;\n})() }}"
+            },
+            {
+              "fieldLabel": "Decision",
+              "fieldType": "dropdown",
+              "fieldOptions": {
+                "values": [
+                  {
+                    "option": "=Approve"
+                  },
+                  {
+                    "option": "Reject"
+                  }
+                ]
+              },
+              "requiredField": true
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.wait",
+      "typeVersion": 1.1,
+      "position": [
+        1792,
+        -96
+      ],
+      "id": "866ad725-fb3e-4573-968a-88b2c23598fe",
+      "name": "Wait",
+      "webhookId": "f32e79d1-ec60-4cac-87d9-db80a31add1e"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 3
+          },
+          "conditions": [
+            {
+              "id": "fb74dbb9",
+              "leftValue": "={ String($json.Decision ?? '').trim() }",
+              "rightValue": "Approve",
+              "operator": {
+                "type": "string",
+                "operation": "equals",
+                "name": "filter.operator.equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.3,
+      "position": [
+        1968,
+        -96
+      ],
+      "id": "65a6e8bf-c1a5-4dac-a49b-a9d043941f48",
+      "name": "If"
+    },
+    {
+      "parameters": {
+        "jsCode": "const crypto = require('crypto');\nconst draft = $input.first().json;\nconst payload = JSON.stringify({weekly_pulse: draft.weekly_pulse, fee_explainer: draft.explanation_bullets, source_links: draft.source_links, last_checked: draft.last_checked, product: \"Groww\"}, null, 2);\nconst payloadHash = crypto.createHash('sha256').update(payload).digest('hex');\nconst runId = draft.run_id ?? `groww_approval_${Date.now()}`;\nconst now = new Date().toISOString();\nconst approvalRecord = {run_id: runId, product: \"Groww\", payload_hash: payloadHash, payload_json: payload, approval_state: \"approved\", approved_at: now, actions: {append_to_doc: {status: \"not_run\", at: null}, create_email_draft: {status: \"not_run\", at: null}}};\nreturn [{ json: { run_id: runId, payload_hash: payloadHash, payload_json: payload, approval_record: approvalRecord, approval_state: \"approved\", approved_at: now } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        2200,
+        -96
+      ],
+      "id": "15b79c2664e04f7b81d5867d278e0143",
+      "name": "Compute Approval Record"
+    },
+    {
+      "parameters": {
+        "operation": "execute",
+        "tool": "append_to_doc",
+        "additionalFields": {}
+      },
+      "type": "@n8n/n8n-nodes-langchain.mcpClient",
+      "typeVersion": 1.0,
+      "position": [
+        2424,
+        -96
+      ],
+      "id": "be8997c086f44d039d06ea18e4e6b699",
+      "name": "MCP Client \u2014 Delivery Actions",
+      "credentials": {
+        "httpBearerAuth": {
+          "id": "PLACEHOLDER_BEARER_AUTH_CREDENTIAL_ID",
+          "name": "Bearer Auth account"
+        }
+      }
+    }
+  ],
+  "connections": {
+    "29f02fde-0fd6-4ead-949b-286320b5080f": {
+      "main": [
+        [
+          {
+            "node": "9d59781a-779c-401c-be53-9a90ccd4f254",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9d59781a-779c-401c-be53-9a90ccd4f254": {
+      "main": [
+        [
+          {
+            "node": "191603ec-5562-4f23-875b-b0af2407684a",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "191603ec-5562-4f23-875b-b0af2407684a": {
+      "main": [
+        [
+          {
+            "node": "b4482b30-e207-4150-a8c1-79979a066c0e",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "b4482b30-e207-4150-a8c1-79979a066c0e": {
+      "main": [
+        [
+          {
+            "node": "1e716765-beb4-47de-b01d-f459bee3aeeb",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "1e716765-beb4-47de-b01d-f459bee3aeeb": {
+      "main": [
+        [
+          {
+            "node": "715c7241-2964-4aae-be1c-0cf8f051e01f",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "715c7241-2964-4aae-be1c-0cf8f051e01f": {
+      "main": [
+        [
+          {
+            "node": "9c5b40d1-d8fc-4fd1-b859-a63029eb59f6",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "9c5b40d1-d8fc-4fd1-b859-a63029eb59f6": {
+      "main": [
+        [
+          {
+            "node": "71066213-1f1b-4042-80a1-4425d31f5b66",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "71066213-1f1b-4042-80a1-4425d31f5b66": {
+      "main": [
+        [
+          {
+            "node": "866ad725-fb3e-4573-968a-88b2c23598fe",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "866ad725-fb3e-4573-968a-88b2c23598fe": {
+      "main": [
+        [
+          {
+            "node": "65a6e8bf-c1a5-4dac-a49b-a9d043941f48",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "65a6e8bf-c1a5-4dac-a49b-a9d043941f48": {
+      "main": [
+        [
+          {
+            "node": "15b79c2664e04f7b81d5867d278e0143",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "15b79c2664e04f7b81d5867d278e0143": {
+      "main": [
+        [
+          {
+            "node": "be8997c086f44d039d06ea18e4e6b699",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": false,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "f40f242b31854eec821e8eeb44b1f8d4",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "placeholder"
+  },
+  "nodeGroups": [],
+  "id": "739e5fe46d2f4a299759407137dc323f",
+  "tags": []
+}
