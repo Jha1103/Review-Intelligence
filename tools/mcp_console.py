@@ -116,6 +116,19 @@ def read_state() -> dict:
             "select id from execution_entity where workflowId=? and status in "
             "('waiting','running','new') order by id desc limit 1", (ANALYSIS_ID,)
         ).fetchone()
+
+        # n8n signs the resume URL, so it cannot be constructed from the
+        # execution id alone — an unsigned link is rejected as "Invalid Form
+        # Link". Read the signed URL n8n actually generated.
+        form_url = None
+        if waiting:
+            d = con.execute("select data from execution_data where executionId=?",
+                            (waiting[0],)).fetchone()
+            if d:
+                m = re.search(r'https?://[^"\\ ,]*?/form-waiting/\d+\?signature=[a-f0-9]+',
+                              str(d[0]))
+                if m:
+                    form_url = m.group(0)
     finally:
         con.close()
         shutil.rmtree(SNAP, ignore_errors=True)
@@ -125,7 +138,7 @@ def read_state() -> dict:
         "executions": execs,
         "audit": audit,
         "waitingExecutionId": waiting[0] if waiting else None,
-        "formUrl": f"{N8N}/form-waiting/{waiting[0]}" if waiting else None,
+        "formUrl": form_url,
     }
 
 
