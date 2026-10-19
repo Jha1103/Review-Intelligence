@@ -659,6 +659,23 @@
           "name": "Bearer Auth account"
         }
       }
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "mcp-console-run",
+        "responseMode": "onReceived",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [
+        -608,
+        560
+      ],
+      "id": "c0ff1ce0-c0n5-0le0-7r16-9e7000000001",
+      "name": "Console Trigger (Webhook)",
+      "webhookId": "7b3d9a21-5c84-4e17-9f02-6a1d8c3e4b50"
     }
   ],
   "pinData": {},
@@ -849,6 +866,17 @@
           },
           {
             "node": "MCP Client — create_email_draft",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Console Trigger (Webhook)": {
+      "main": [
+        [
+          {
+            "node": "Get Reviews for Demo",
             "type": "main",
             "index": 0
           }

@@ -1,0 +1,181 @@
+#!/usr/bin/env python3
+"""Live MCP control console for the Groww review-intelligence workflow.
+
+Serves a small panel that triggers the REAL n8n workflow over its webhook and
+then shows what actually happened: executions, MCP tool calls, Google Docs and
+Gmail responses, and the approval audit table.
+
+It deliberately cannot approve anything. Approval happens at n8n's own form,
+which is the control this project exists to demonstrate; a console that wrote
+its own approved audit row would be demonstrating the bypass instead.
+
+    python3 tools/mcp_console.py          # then open http://localhost:8700
+
+Reads n8n state by snapshotting its SQLite file out of the container, so it
+needs no n8n API key. Nothing is written back.
+"""
+
+from __future__ import annotations
+
+import json
+import re
+import shutil
+import sqlite3
+import subprocess
+import tempfile
+import urllib.error
+import urllib.request
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
+
+CONTAINER = "n8n-groww"
+N8N = "http://localhost:5678"
+WEBHOOK = f"{N8N}/webhook/mcp-console-run"
+PORT = 8700
+
+ANALYSIS_ID = "Lu3RqGhZAg4oqfIM"
+DELIVERY_ID = "TEQi8qqevof4F319"
+AUDIT_TABLE = "data_table_user_h0VKrpTikZl8B8Af"
+
+HERE = Path(__file__).resolve().parent
+SNAP = Path(tempfile.gettempdir()) / "mcp_console_snapshot"
+
+
+def snapshot_db() -> Path | None:
+    """Copy n8n's SQLite (plus WAL) out of the container for a consistent read."""
+    SNAP.mkdir(exist_ok=True)
+    db = SNAP / "database.sqlite"
+    for suffix in ("", "-wal", "-shm"):
+        src = f"{CONTAINER}:/home/node/.n8n/database.sqlite{suffix}"
+        dst = str(db) + suffix
+        try:
+            subprocess.run(["docker", "cp", src, dst], check=suffix == "",
+                           capture_output=True, timeout=30)
+        except Exception:
+            if suffix == "":
+                return None
+    return db if db.exists() else None
+
+
+def n8n_up() -> bool:
+    try:
+        with urllib.request.urlopen(f"{N8N}/healthz", timeout=4) as r:
+            return json.loads(r.read()).get("status") == "ok"
+    except Exception:
+        return False
+
+
+def read_state() -> dict:
+    db = snapshot_db()
+    if db is None:
+        return {"error": "Could not read n8n state. Is the container running?"}
+
+    con = sqlite3.connect(str(db))  # read-write so the WAL is applied
+    try:
+        execs = []
+        rows = con.execute(
+            "select e.id, e.workflowId, w.name, e.status, e.mode, e.startedAt, e.stoppedAt "
+            "from execution_entity e left join workflow_entity w on w.id = e.workflowId "
+            "order by e.id desc limit 12"
+        ).fetchall()
+        for eid, wfid, name, status, mode, started, stopped in rows:
+            entry = {
+                "id": eid, "workflow": name or wfid, "status": status,
+                "mode": mode, "startedAt": started, "stoppedAt": stopped,
+                "isDelivery": wfid == DELIVERY_ID, "operation": None, "detail": None,
+            }
+            if wfid == DELIVERY_ID:
+                d = con.execute("select data from execution_data where executionId=?",
+                                (eid,)).fetchone()
+                blob = str(d[0]) if d else ""
+                if '"append_to_doc"' in blob:
+                    entry["operation"] = "append_to_doc"
+                elif '"create_email_draft"' in blob:
+                    entry["operation"] = "create_email_draft"
+                bits = []
+                m = re.search(r'"documentId":\s*"([^"]{6,})"', blob)
+                if m:
+                    bits.append(f"Google Docs documentId {m.group(1)[:12]}…")
+                m = re.search(r'"threadId":\s*"([^"]{3,})"', blob)
+                if m:
+                    bits.append(f"Gmail threadId {m.group(1)[:12]}…")
+                if "Verify Persisted Approval" in blob:
+                    bits.append("hash verified against stored approval")
+                entry["detail"] = " · ".join(bits) or None
+            execs.append(entry)
+
+        audit = [
+            {"id": r[0], "run_id": r[1], "status": r[2], "doc_status": r[3],
+             "draft_status": r[4], "approved_at": r[5]}
+            for r in con.execute(
+                f"select id, run_id, status, doc_status, draft_status, approved_at "
+                f"from {AUDIT_TABLE} order by id desc limit 6")
+        ]
+
+        waiting = con.execute(
+            "select id from execution_entity where workflowId=? and status in "
+            "('waiting','running','new') order by id desc limit 1", (ANALYSIS_ID,)
+        ).fetchone()
+    finally:
+        con.close()
+        shutil.rmtree(SNAP, ignore_errors=True)
+
+    return {
+        "n8n": n8n_up(),
+        "executions": execs,
+        "audit": audit,
+        "waitingExecutionId": waiting[0] if waiting else None,
+        "formUrl": f"{N8N}/form-waiting/{waiting[0]}" if waiting else None,
+    }
+
+
+def trigger_run() -> dict:
+    req = urllib.request.Request(
+        WEBHOOK, data=json.dumps({"source": "mcp-console"}).encode(),
+        headers={"Content-Type": "application/json"}, method="POST")
+    try:
+        with urllib.request.urlopen(req, timeout=25) as r:
+            return {"ok": True, "status": r.status, "body": r.read().decode()[:300]}
+    except urllib.error.HTTPError as e:
+        body = e.read().decode()[:300]
+        hint = ("The webhook is not registered. Open the workflow in n8n and "
+                "save it once so the production webhook registers."
+                if e.code == 404 else "")
+        return {"ok": False, "status": e.code, "body": body, "hint": hint}
+    except Exception as e:
+        return {"ok": False, "status": 0, "body": str(e)[:300]}
+
+
+class Handler(BaseHTTPRequestHandler):
+    def _send(self, code, payload, ctype="application/json"):
+        body = payload if isinstance(payload, bytes) else json.dumps(payload).encode()
+        self.send_response(code)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "no-store")
+        self.end_headers()
+        self.wfile.write(body)
+
+    def do_GET(self):
+        if self.path.startswith("/api/state"):
+            self._send(200, read_state())
+        elif self.path in ("/", "/index.html"):
+            html = (HERE / "mcp_console.html").read_bytes()
+            self._send(200, html, "text/html; charset=utf-8")
+        else:
+            self._send(404, {"error": "not found"})
+
+    def do_POST(self):
+        if self.path.startswith("/api/run"):
+            self._send(200, trigger_run())
+        else:
+            self._send(404, {"error": "not found"})
+
+    def log_message(self, *a):  # keep the recording's terminal quiet
+        pass
+
+
+if __name__ == "__main__":
+    print(f"MCP console  ->  http://localhost:{PORT}")
+    print(f"n8n reachable: {n8n_up()}")
+    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()

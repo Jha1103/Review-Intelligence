@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>MCP Console — Groww Review Intelligence</title>
+<style>
+:root{--bg:#0b1011;--card:#131b1c;--line:#2a3637;--muted:#879896;--text:#f4f8f5;
+      --accent:#b6ff77;--aqua:#89e6de;--warm:#f9c49d;--red:#ff6b6b;--green:#4ade80;
+      --mono:ui-monospace,"SF Mono",Menlo,monospace;
+      --font:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--text);font:15px/1.6 var(--font)}
+header{border-bottom:1px solid var(--line);padding:18px 28px;display:flex;
+       align-items:center;gap:16px;position:sticky;top:0;background:rgba(11,16,17,.96);
+       backdrop-filter:blur(12px);z-index:10}
+h1{font-size:17px;margin:0;letter-spacing:-.3px}
+.tag{font:10px var(--mono);letter-spacing:1.3px;color:var(--accent);
+     border:1px solid rgba(182,255,119,.35);border-radius:20px;padding:4px 10px}
+.health{margin-left:auto;display:flex;align-items:center;gap:8px;font:11px var(--mono);color:var(--muted)}
+.dot{width:8px;height:8px;border-radius:50%;background:#556463}
+.dot.ok{background:var(--green);box-shadow:0 0 0 4px rgba(74,222,128,.15)}
+.dot.bad{background:var(--red)}
+main{padding:28px;max-width:1180px;margin:auto;display:grid;gap:20px}
+.steps{display:grid;grid-template-columns:repeat(3,1fr);gap:16px}
+.step{border:1px solid var(--line);border-radius:14px;background:var(--card);padding:22px;
+      display:flex;flex-direction:column;gap:12px}
+.step.active{border-color:var(--accent);box-shadow:0 0 0 3px rgba(182,255,119,.12)}
+.step.done{border-color:var(--green)}
+.num{font:10px var(--mono);letter-spacing:1.4px;color:var(--muted)}
+.step h2{font-size:16px;margin:0;letter-spacing:-.2px}
+.step p{margin:0;font-size:13px;color:#a6b8b2;line-height:1.65}
+button{font:inherit;cursor:pointer;border-radius:9px;padding:12px 18px;font-weight:650;
+       font-size:14px;border:1px solid transparent;transition:transform .12s,opacity .2s}
+button:hover:not(:disabled){transform:translateY(-1px)}
+button:disabled{opacity:.45;cursor:not-allowed;transform:none}
+.primary{background:var(--accent);color:#101913}
+.ghost{background:transparent;border-color:#556463;color:var(--text)}
+.link-btn{display:inline-flex;align-items:center;justify-content:center;text-decoration:none}
+.panel{border:1px solid var(--line);border-radius:14px;background:var(--card);overflow:hidden}
+.panel h3{margin:0;padding:15px 20px;font-size:13px;letter-spacing:.2px;
+          border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+.count{font:10px var(--mono);color:var(--muted);margin-left:auto}
+.rows{max-height:340px;overflow:auto}
+.row{display:grid;grid-template-columns:62px 1fr auto;gap:14px;align-items:center;
+     padding:13px 20px;border-bottom:1px solid #1d2728;font-size:13px}
+.row:last-child{border-bottom:0}
+.row.mcp{background:rgba(137,230,222,.05)}
+.eid{font:11px var(--mono);color:var(--muted)}
+.wf{min-width:0}
+.wf b{font-weight:600;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wf small{color:var(--muted);font-size:11.5px}
+.op{font:10px var(--mono);color:var(--aqua);border:1px solid rgba(137,230,222,.4);
+    border-radius:20px;padding:3px 9px;white-space:nowrap}
+.pill{font:10px var(--mono);border-radius:20px;padding:3px 9px;white-space:nowrap}
+.pill.success{color:var(--green);border:1px solid rgba(74,222,128,.4)}
+.pill.waiting{color:var(--warm);border:1px solid rgba(249,196,157,.45)}
+.pill.running{color:var(--accent);border:1px solid rgba(182,255,119,.4)}
+.pill.error,.pill.crashed{color:var(--red);border:1px solid rgba(255,107,107,.4)}
+.pill.pending{color:var(--muted);border:1px solid var(--line)}
+.pill.done{color:var(--green);border:1px solid rgba(74,222,128,.4)}
+.empty{padding:26px 20px;color:var(--muted);font-size:13px}
+.audit{width:100%;border-collapse:collapse;font:11.5px var(--mono)}
+.audit th{text-align:left;color:var(--muted);font-weight:500;padding:11px 20px;
+          border-bottom:1px solid var(--line);font-size:10px;letter-spacing:1px}
+.audit td{padding:11px 20px;border-bottom:1px solid #1d2728}
+.audit tr:last-child td{border-bottom:0}
+.gate{border:1px solid var(--warm);background:#1d1b17;border-radius:12px;padding:18px 20px;
+      display:flex;align-items:center;gap:16px;flex-wrap:wrap}
+.gate p{margin:0;font-size:13px;color:#e8d9c8;flex:1;min-width:260px}
+.note{font-size:12px;color:var(--muted);padding:0 2px}
+.err{color:var(--red);font-size:12.5px;margin:0}
+@media(max-width:860px){.steps{grid-template-columns:1fr}main{padding:18px}}
+</style>
+</head>
+<body>
+<header>
+  <span class="tag">MCP CONSOLE</span>
+  <h1>Groww Review Intelligence — live workflow control</h1>
+  <div class="health"><span class="dot" id="dot"></span><span id="healthText">checking…</span></div>
+</header>
+
+<main>
+  <div class="steps">
+    <div class="step" id="s1">
+      <span class="num">STEP 1</span>
+      <h2>Trigger the workflow</h2>
+      <p>Calls the real n8n webhook. Loads 1,000 reviews, builds the pulse and fee explainer, then stops at the approval gate.</p>
+      <button class="primary" id="runBtn">Run workflow</button>
+      <p class="err" id="runErr" hidden></p>
+    </div>
+    <div class="step" id="s2">
+      <span class="num">STEP 2</span>
+      <h2>Human approval</h2>
+      <p>n8n serves the approval form. Nothing is written to Google Docs or Gmail until it is approved there.</p>
+      <a class="ghost link-btn" id="formBtn" target="_blank" rel="noreferrer" href="#" style="pointer-events:none;opacity:.45">Waiting for a run…</a>
+    </div>
+    <div class="step" id="s3">
+      <span class="num">STEP 3</span>
+      <h2>MCP delivery</h2>
+      <p>On approval the MCP client calls <code>append_to_doc</code> and <code>create_email_draft</code>. Both appear below as they land.</p>
+      <button class="ghost" id="refreshBtn">Refresh now</button>
+    </div>
+  </div>
+
+  <div class="gate">
+    <p><strong>Approval is not automated.</strong> This console can start the run and read what happened, but it cannot approve. That is the control being demonstrated — approving from here would be demonstrating its bypass.</p>
+  </div>
+
+  <div class="panel">
+    <h3>Executions <span class="count" id="execCount">—</span></h3>
+    <div class="rows" id="execRows"><div class="empty">No executions read yet.</div></div>
+  </div>
+
+  <div class="panel">
+    <h3>Approval audit table <span class="count">groww_approval_audit</span></h3>
+    <div class="rows">
+      <table class="audit">
+        <thead><tr><th>run_id</th><th>status</th><th>doc</th><th>draft</th><th>approved_at</th></tr></thead>
+        <tbody id="auditRows"><tr><td colspan="5" class="empty">—</td></tr></tbody>
+      </table>
+    </div>
+  </div>
+
+  <p class="note">Polling n8n every 2s · <code>mode=integrated</code> means the delivery workflow ran as an MCP tool call, not by hand.</p>
+</main>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+let lastFormUrl = null;
+
+async function poll() {
+  let d;
+  try {
+    d = await (await fetch('/api/state', {cache:'no-store'})).json();
+  } catch {
+    $('dot').className = 'dot bad'; $('healthText').textContent = 'console unreachable';
+    return;
+  }
+  if (d.error) {
+    $('dot').className = 'dot bad'; $('healthText').textContent = d.error;
+    return;
+  }
+  $('dot').className = 'dot ' + (d.n8n ? 'ok' : 'bad');
+  $('healthText').textContent = d.n8n ? 'n8n healthy · localhost:5678' : 'n8n unreachable';
+
+  // Step 2 — approval link
+  const btn = $('formBtn');
+  if (d.formUrl) {
+    lastFormUrl = d.formUrl;
+    btn.href = d.formUrl;
+    btn.textContent = 'Open approval form ↗';
+    btn.style.pointerEvents = ''; btn.style.opacity = '';
+    $('s2').classList.add('active');
+  } else {
+    $('s2').classList.remove('active');
+    if (!lastFormUrl) { btn.textContent = 'Waiting for a run…'; btn.style.pointerEvents='none'; btn.style.opacity='.45'; }
+  }
+
+  // Executions
+  const rows = d.executions || [];
+  $('execCount').textContent = rows.length ? `${rows.length} most recent` : '—';
+  $('execRows').innerHTML = rows.length ? rows.map(e => {
+    const st = String(e.status || '').toLowerCase();
+    return `<div class="row ${e.isDelivery ? 'mcp' : ''}">
+      <span class="eid">#${esc(e.id)}</span>
+      <span class="wf">
+        <b>${esc(e.workflow)}</b>
+        <small>mode=${esc(e.mode)}${e.detail ? ' · ' + esc(e.detail) : ''}</small>
+      </span>
+      <span style="display:flex;gap:7px;align-items:center">
+        ${e.operation ? `<span class="op">${esc(e.operation)}</span>` : ''}
+        <span class="pill ${esc(st)}">${esc(e.status)}</span>
+      </span>
+    </div>`;
+  }).join('') : '<div class="empty">No executions yet. Press Run workflow.</div>';
+
+  // Audit
+  const a = d.audit || [];
+  $('auditRows').innerHTML = a.length ? a.map(r => `<tr>
+      <td>${esc(r.run_id)}</td>
+      <td><span class="pill ${esc(r.status)}">${esc(r.status)}</span></td>
+      <td><span class="pill ${esc(r.doc_status)}">${esc(r.doc_status)}</span></td>
+      <td><span class="pill ${esc(r.draft_status)}">${esc(r.draft_status)}</span></td>
+      <td style="color:#879896">${esc(r.approved_at)}</td>
+    </tr>`).join('') : '<tr><td colspan="5" class="empty">No approvals recorded yet.</td></tr>';
+
+  const delivered = a.some(r => r.doc_status === 'done' && r.draft_status === 'done');
+  $('s3').classList.toggle('done', delivered);
+  $('s1').classList.toggle('done', rows.length > 0);
+}
+
+$('runBtn').onclick = async () => {
+  const b = $('runBtn'), err = $('runErr');
+  b.disabled = true; b.textContent = 'Triggering…'; err.hidden = true;
+  try {
+    const r = await (await fetch('/api/run', {method:'POST'})).json();
+    if (!r.ok) { err.textContent = `HTTP ${r.status}. ${r.hint || r.body || ''}`; err.hidden = false; }
+    else $('s1').classList.add('done');
+  } catch (e) {
+    err.textContent = String(e); err.hidden = false;
+  }
+  b.disabled = false; b.textContent = 'Run workflow';
+  poll();
+};
+$('refreshBtn').onclick = poll;
+
+poll();
+setInterval(poll, 2000);
+</script>
+</body>
+</html>
