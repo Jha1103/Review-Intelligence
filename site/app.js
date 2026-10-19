@@ -323,6 +323,66 @@
   renderCanvas();
   resetDemo();
 
+  // Demo video. config.js invites a URL but nothing read it, so the
+  // placeholder never went away. Embed known hosts only; anything else is
+  // shown as a plain link rather than injected into an iframe.
+  const videoShell = document.getElementById('video-shell');
+  const rawVideoUrl = String(window.DEMO_VIDEO_URL || '').trim();
+
+  if (videoShell && rawVideoUrl) {
+    const embedFor = (raw) => {
+      let u;
+      try { u = new URL(raw); } catch (_) { return null; }
+      if (u.protocol !== 'https:') return null;
+      const host = u.hostname.replace(/^www\./, '');
+      const id = (v) => /^[\w-]{6,20}$/.test(v) ? v : null;
+
+      if (host === 'youtu.be') {
+        const v = id(u.pathname.slice(1));
+        return v && `https://www.youtube-nocookie.com/embed/${v}`;
+      }
+      if (host === 'youtube.com' || host === 'm.youtube.com') {
+        const v = id(u.searchParams.get('v') || '');
+        if (v) return `https://www.youtube-nocookie.com/embed/${v}`;
+        const m = u.pathname.match(/^\/(?:embed|shorts)\/([\w-]{6,20})$/);
+        return m ? `https://www.youtube-nocookie.com/embed/${m[1]}` : null;
+      }
+      if (host === 'vimeo.com') {
+        const m = u.pathname.match(/^\/(\d{6,12})$/);
+        return m ? `https://player.vimeo.com/video/${m[1]}` : null;
+      }
+      if (/\.(mp4|webm|mov)$/i.test(u.pathname)) return { file: u.href };
+      return null;
+    };
+
+    const embed = embedFor(rawVideoUrl);
+
+    if (embed && embed.file) {
+      const v = document.createElement('video');
+      v.src = embed.file;
+      v.controls = true;
+      v.preload = 'metadata';
+      videoShell.replaceChildren(v);
+    } else if (embed) {
+      const f = document.createElement('iframe');
+      f.src = embed;
+      f.title = 'Workflow walkthrough';
+      f.loading = 'lazy';
+      f.allow = 'accelerometer; clipboard-write; encrypted-media; picture-in-picture';
+      f.allowFullscreen = true;
+      f.referrerPolicy = 'strict-origin-when-cross-origin';
+      videoShell.replaceChildren(f);
+    } else {
+      const ph = document.getElementById('video-placeholder');
+      if (ph) {
+        const note = document.createElement('p');
+        note.className = 'video-placeholder-note';
+        note.textContent = 'DEMO_VIDEO_URL is set but is not a recognised https YouTube, Vimeo or video-file URL.';
+        ph.appendChild(note);
+      }
+    }
+  }
+
   // Deliverables tabs. Content comes from the generated deliverables.js so
   // the page always shows exactly what shipped in outputs/.
   const dTabs = document.querySelectorAll('.deliverable-tab');

@@ -129,3 +129,26 @@ def test_site_loads_deliverables_before_app():
     html = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
     assert "deliverables.js" in html
     assert html.index("deliverables.js") < html.index("app.js")
+
+
+def test_video_url_is_actually_read_by_the_site():
+    """config.js invites a URL; app.js must consume it, or it is dead config."""
+    app = (ROOT / "site" / "app.js").read_text(encoding="utf-8")
+    cfg = (ROOT / "site" / "config.js").read_text(encoding="utf-8")
+    assert "DEMO_VIDEO_URL" in cfg
+    assert "DEMO_VIDEO_URL" in app, "config.js sets a URL app.js never reads"
+    assert "youtube-nocookie" in app, "embed should use the no-cookie host"
+
+
+def test_video_embed_rejects_non_https_and_unknown_hosts():
+    app = (ROOT / "site" / "app.js").read_text(encoding="utf-8")
+    assert "u.protocol !== 'https:'" in app
+    assert "youtu.be" in app and "vimeo.com" in app
+
+
+def test_site_ships_no_absolute_asset_paths():
+    """GitHub Pages serves a project repo under /<repo>/, so a leading
+    slash resolves to the domain root and 404s."""
+    html = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
+    bad = re.findall(r'(?:src|href)="/[^/"][^"]*"', html)
+    assert not bad, f"absolute paths would break on a subpath deploy: {bad}"

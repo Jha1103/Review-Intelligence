@@ -153,6 +153,43 @@ Import both files from [`n8n/`](./n8n/). They ship with **placeholder credential
 
 ---
 
+## Deployment
+
+### GitHub Pages (simplest — no new account)
+
+`.github/workflows/pages.yml` publishes `site/` on every push to `main` that
+touches it. Enable it once:
+
+**repo → Settings → Pages → Source: "GitHub Actions"**
+
+The site then lives at `https://jha1103.github.io/Review-Intelligence/`. The
+workflow fails the build if an absolute asset path creeps in, because Pages
+serves a project repo under a subpath where a leading slash would 404.
+
+### Render Static Site
+
+`render.yaml` is also configured: static runtime, no build step, publish
+directory `site`. Connect the repo in Render and deploy.
+
+---
+
+## Demo video
+
+[`docs/VIDEO_SCRIPT.md`](./docs/VIDEO_SCRIPT.md) has a timed shot list for a
+2:50 recording, plus setup and redaction steps.
+
+Once recorded, paste the URL into `site/config.js`:
+
+```js
+window.DEMO_VIDEO_URL = "https://youtu.be/XXXXXXXXXXX";
+```
+
+The page embeds it automatically — YouTube, Vimeo, or a direct `.mp4`/`.webm`/
+`.mov` over https — and drops the placeholder. Leave it empty and the
+placeholder stays.
+
+---
+
 ## Files
 
 | Path | Description | Committed? |
@@ -167,9 +204,11 @@ Import both files from [`n8n/`](./n8n/). They ship with **placeholder credential
 | `data/classification_results.json` | Recorded classifier run — single source of truth for theme counts | ✅ |
 | `data/sampling_report.json` | Sampling methodology report | ✅ |
 | `n8n/*.json` | Workflow exports, placeholder credentials only | ✅ |
-| `docs/` | Architecture, classification prompt and the run book | ✅ |
+| `docs/` | Architecture, prompt, run book and video script | ✅ |
 | `screenshots/` | Execution evidence images + capture checklist | ✅ |
 | `site/deliverables.js` | Generated; mirrors `outputs/` for the site | ✅ |
+| `.github/workflows/pages.yml` | GitHub Pages deploy | ✅ |
+| `render.yaml` | Render Static Site blueprint | ✅ |
 | `data/raw_reviews.csv`, `data/cleaned_reviews.csv` | Pre-redaction review text | ❌ gitignored |
 | `config/config.local.json`, `.env`, `state/` | Credentials and operational state | ❌ gitignored |
 
