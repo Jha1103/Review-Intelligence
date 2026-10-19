@@ -42,6 +42,9 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none}
           border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
 .count{font:10px var(--mono);color:var(--muted);margin-left:auto}
 .rows{max-height:340px;overflow:auto}
+/* An open log must not be trapped in the scroller — it is the evidence. */
+.rows.expanded{max-height:none;overflow:visible}
+.lout{max-height:none}
 .row{display:grid;grid-template-columns:62px 1fr auto;gap:14px;align-items:center;
      padding:13px 20px;border-bottom:1px solid #1d2728;font-size:13px}
 .row:last-child{border-bottom:0}
@@ -75,6 +78,22 @@ button:disabled{opacity:.45;cursor:not-allowed;transform:none}
 .verdict{margin:0;padding:16px 20px;border-radius:12px;font-size:13.5px;line-height:1.6}
 .verdict.reject{border:1px solid rgba(255,107,107,.5);background:rgba(255,107,107,.07);color:#ffd9d9}
 .verdict.approve{border:1px solid rgba(74,222,128,.45);background:rgba(74,222,128,.06);color:#d8f8e4}
+.row{cursor:pointer}
+.row:hover{background:rgba(255,255,255,.035)}
+.row.open{background:rgba(137,230,222,.07)}
+.log{border-top:1px solid var(--line);background:#0c1213;padding:4px 0 10px}
+.lognode{display:grid;grid-template-columns:18px 1fr;gap:12px;padding:11px 22px;border-bottom:1px solid #161f20}
+.lognode:last-child{border-bottom:0}
+.lmark{font:11px var(--mono);color:var(--green)}
+.lmark.err{color:var(--red)}
+.lname{font:12.5px var(--mono);color:var(--text);display:flex;gap:10px;align-items:baseline;flex-wrap:wrap}
+.lms{color:var(--muted);font-size:11px}
+.lout{margin:7px 0 0;font:11px/1.65 var(--mono);color:#9fb6ae;background:#0a1011;border:1px solid var(--line);
+      border-radius:7px;padding:10px 12px;white-space:pre-wrap;word-break:break-word;max-height:190px;overflow:auto}
+.lerr{color:var(--red)}
+.loading{padding:16px 22px;color:var(--muted);font:12px var(--mono)}
+.stale{opacity:.5}
+.hintrow{padding:11px 20px;font:11px var(--mono);color:var(--muted);border-bottom:1px solid #1d2728}
 .err{color:var(--red);font-size:12.5px;margin:0}
 @media(max-width:860px){.steps{grid-template-columns:1fr}main{padding:18px}}
 </style>
@@ -160,7 +179,7 @@ async function poll() {
   if (d.formUrl) {
     lastFormUrl = d.formUrl;
     btn.href = d.formUrl;
-    btn.textContent = 'Open approval form ↗';
+    btn.textContent = `Open approval form for #${d.waitingExecutionId} ↗`;
     btn.style.pointerEvents = ''; btn.style.opacity = '';
     $('s2').classList.add('active');
   } else {
@@ -168,24 +187,7 @@ async function poll() {
     if (!lastFormUrl) { btn.textContent = 'Waiting for a run…'; btn.style.pointerEvents='none'; btn.style.opacity='.45'; }
   }
 
-  // Executions
   const rows = d.executions || [];
-  $('execCount').textContent = rows.length ? `${rows.length} most recent` : '—';
-  $('execRows').innerHTML = rows.length ? rows.map(e => {
-    const st = String(e.status || '').toLowerCase();
-    return `<div class="row ${e.isDelivery ? 'mcp' : ''} ${e.decision === 'Reject' ? 'rejected' : ''}">
-      <span class="eid">#${esc(e.id)}</span>
-      <span class="wf">
-        <b>${esc(e.workflow)}</b>
-        <small>mode=${esc(e.mode)}${e.detail ? ' · ' + esc(e.detail) : ''}</small>
-      </span>
-      <span style="display:flex;gap:7px;align-items:center">
-        ${e.decision ? `<span class="pill ${e.decision === 'Reject' ? 'reject' : 'approve'}">${esc(e.decision.toUpperCase())}</span>` : ''}
-        ${e.operation ? `<span class="op">${esc(e.operation)}</span>` : ''}
-        <span class="pill ${esc(st)}">${esc(e.status)}</span>
-      </span>
-    </div>`;
-  }).join('') : '<div class="empty">No executions yet. Press Run workflow.</div>';
 
   // Audit
   const a = d.audit || [];
@@ -216,6 +218,80 @@ async function poll() {
   } else {
     banner.hidden = true;
   }
+
+  // Executions. While a log is expanded, leave the list alone: re-rendering
+  // would tear out the open log mid-read, and it makes the list jump during
+  // a recording.
+  $('execCount').textContent = rows.length
+    ? `${rows.length} most recent${openEid ? ' · log open, list paused' : ''}` : '—';
+  if (openEid) return;
+  $('execRows').innerHTML = rows.length ? rows.map(e => {
+    const st = String(e.status || '').toLowerCase();
+    const stale = e.status === 'waiting' && e.id !== d.waitingExecutionId;
+    return `<div class="row ${e.isDelivery ? 'mcp' : ''} ${e.decision === 'Reject' ? 'rejected' : ''} ${stale ? 'stale' : ''}" data-eid="${e.id}">
+      <span class="eid">#${esc(e.id)}</span>
+      <span class="wf">
+        <b>${esc(e.workflow)}</b>
+        <small>mode=${esc(e.mode)}${e.detail ? ' · ' + esc(e.detail) : ''}${stale ? ' · abandoned, never submitted' : ''} · click for logs</small>
+      </span>
+      <span style="display:flex;gap:7px;align-items:center">
+        ${e.decision ? `<span class="pill ${e.decision === 'Reject' ? 'reject' : 'approve'}">${esc(e.decision.toUpperCase())}</span>` : ''}
+        ${e.operation ? `<span class="op">${esc(e.operation)}</span>` : ''}
+        <span class="pill ${esc(st)}">${esc(e.status)}</span>
+      </span>
+    </div>`;
+  }).join('') : '<div class="empty">No executions yet. Press Run workflow.</div>';
+
+  // Re-attach handlers and restore any open log after a re-render.
+  document.querySelectorAll('#execRows .row').forEach(el => {
+    el.onclick = () => toggleLog(el.dataset.eid, el);
+  });
+
+
+}
+
+let openEid = null, openHtml = null;
+
+function renderLog(d) {
+  if (d.error) return `<div class="log"><div class="loading">${esc(d.error)}</div></div>`;
+  const nodes = d.nodes || [];
+  if (!nodes.length) return `<div class="log"><div class="loading">No node data recorded for #${esc(d.id)}.</div></div>`;
+  return `<div class="log">` + nodes.map(n => {
+    const failed = n.error || (n.status && n.status !== 'success');
+    return `<div class="lognode">
+      <span class="lmark ${failed ? 'err' : ''}">${failed ? '✕' : '✓'}</span>
+      <span>
+        <span class="lname"><b>${esc(n.node)}</b><span class="lms">${esc(n.status || '')}${n.ms != null ? ' · ' + esc(n.ms) + 'ms' : ''}</span></span>
+        ${n.error ? `<pre class="lout lerr">${esc(n.error)}</pre>` : ''}
+        ${n.output != null ? `<pre class="lout">${esc(JSON.stringify(n.output, null, 2))}</pre>` : ''}
+      </span>
+    </div>`;
+  }).join('') + `</div>`;
+}
+
+async function toggleLog(eid, el) {
+  const existing = el.nextElementSibling;
+  if (openEid === eid && existing && existing.classList.contains('log')) {
+    existing.remove(); el.classList.remove('open');
+    $('execRows').classList.remove('expanded');
+    openEid = null; openHtml = null; return;
+  }
+  document.querySelectorAll('#execRows .log').forEach(n => n.remove());
+  document.querySelectorAll('#execRows .row').forEach(n => n.classList.remove('open'));
+  $('execRows').classList.add('expanded');
+  el.classList.add('open');
+  openEid = eid;
+  openHtml = '<div class="log"><div class="loading">reading execution data…</div></div>';
+  el.insertAdjacentHTML('afterend', openHtml);
+  try {
+    const d = await (await fetch(`/api/execution/${eid}`, {cache:'no-store'})).json();
+    openHtml = renderLog(d);
+  } catch (e) {
+    openHtml = `<div class="log"><div class="loading">${esc(e)}</div></div>`;
+  }
+  const cur = document.querySelector(`#execRows .row[data-eid="${eid}"]`);
+  if (cur) { if (cur.nextElementSibling?.classList.contains('log')) cur.nextElementSibling.remove();
+             cur.insertAdjacentHTML('afterend', openHtml); }
 }
 
 $('runBtn').onclick = async () => {

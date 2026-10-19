@@ -66,6 +66,111 @@ def n8n_up() -> bool:
         return False
 
 
+def unflatten(raw: str, max_depth: int = 60):
+    """Expand n8n's interned execution data into ordinary JSON.
+
+    n8n dedupes every string and object into a flat array and stores indices,
+    so the same index legitimately appears many times. Memoise rather than
+    treating a repeat visit as a cycle; only a genuine self-reference is one.
+    """
+    arr = json.loads(raw)
+    if not isinstance(arr, list):
+        return arr
+    memo: dict[int, object] = {}
+    resolving: set[int] = set()
+
+    def walk(node, depth):
+        if depth > max_depth:
+            return "<max-depth>"
+        if isinstance(node, str) and node.isdigit():
+            i = int(node)
+            if not (0 <= i < len(arr)):
+                return node
+            if i in memo:
+                return memo[i]
+            if i in resolving:
+                return "<circular>"
+            resolving.add(i)
+            try:
+                v = walk(arr[i], depth + 1)
+            finally:
+                resolving.discard(i)
+            memo[i] = v
+            return v
+        if isinstance(node, list):
+            return [walk(x, depth + 1) for x in node]
+        if isinstance(node, dict):
+            return {k: walk(v, depth + 1) for k, v in node.items()}
+        return node
+
+    return walk(arr[0], 0)
+
+
+def redact(value):
+    """Shorten the private document id and the bulky payload for display."""
+    if isinstance(value, dict):
+        out = {}
+        for k, v in value.items():
+            if k == "documentId" and isinstance(v, str) and len(v) > 12:
+                out[k] = v[:10] + "…(redacted)"
+            elif k == "payload_json" and isinstance(v, str) and len(v) > 220:
+                out[k] = v[:220] + f"… (+{len(v) - 220} chars)"
+            else:
+                out[k] = redact(v)
+        return out
+    if isinstance(value, list):
+        return [redact(v) for v in value[:4]]
+    if isinstance(value, str) and len(value) > 400:
+        return value[:400] + "…"
+    return value
+
+
+def execution_log(eid: int) -> dict:
+    """Node-by-node log for one execution: status, duration and real output."""
+    db = snapshot_db()
+    if db is None:
+        return {"error": "Could not read n8n state."}
+    con = sqlite3.connect(str(db))
+    try:
+        meta = con.execute(
+            "select e.status, e.mode, e.startedAt, e.stoppedAt, w.name "
+            "from execution_entity e left join workflow_entity w on w.id=e.workflowId "
+            "where e.id=?", (eid,)).fetchone()
+        row = con.execute("select data from execution_data where executionId=?",
+                          (eid,)).fetchone()
+        if not meta or not row:
+            return {"error": f"No execution #{eid}"}
+        data = unflatten(str(row[0]))
+        run_data = data.get("resultData", {}).get("runData", {}) if isinstance(data, dict) else {}
+        nodes = []
+        for name, runs in run_data.items():
+            r = runs[0] if isinstance(runs, list) and runs else {}
+            if not isinstance(r, dict):
+                continue
+            try:
+                out = r["data"]["main"][0][0]["json"]
+            except Exception:
+                out = None
+            nodes.append({
+                "node": name,
+                "status": r.get("executionStatus"),
+                "ms": r.get("executionTime"),
+                "startTime": r.get("startTime"),
+                "output": redact(out) if out is not None else None,
+                "error": str(r.get("error"))[:300] if r.get("error") else None,
+            })
+        nodes.sort(key=lambda n: n.get("startTime") or 0)
+        err = data.get("resultData", {}).get("error") if isinstance(data, dict) else None
+        return {
+            "id": eid, "workflow": meta[4], "status": meta[0], "mode": meta[1],
+            "startedAt": meta[2], "stoppedAt": meta[3], "nodes": nodes,
+            "error": str(err)[:400] if err else None,
+        }
+    finally:
+        con.close()
+        shutil.rmtree(SNAP, ignore_errors=True)
+
+
 def decision_of(blob: str) -> tuple[str | None, str | None]:
     """Resolve the approval form answers from n8n's interned execution data.
 
@@ -236,7 +341,14 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         route = self.path.split("?", 1)[0]  # a query string must not 404
-        if route == "/api/state" or self.path.startswith("/api/state"):
+        if route.startswith("/api/execution/"):
+            try:
+                self._send(200, execution_log(int(route.rsplit("/", 1)[-1])))
+            except ValueError:
+                self._send(400, {"error": "bad execution id"})
+            except Exception as e:
+                self._send(200, {"error": str(e)[:200]})
+        elif route == "/api/state" or self.path.startswith("/api/state"):
             try:
                 self._send(200, read_state())
             except Exception as e:
