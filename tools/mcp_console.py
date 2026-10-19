@@ -23,6 +23,7 @@ import shutil
 import sqlite3
 import subprocess
 import tempfile
+import time
 import urllib.error
 import urllib.request
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -65,7 +66,36 @@ def n8n_up() -> bool:
         return False
 
 
-def read_state() -> dict:
+def decision_of(blob: str) -> tuple[str | None, str | None]:
+    """Resolve the approval form answers from n8n's interned execution data.
+
+    n8n dedupes strings into a table and stores indices, so
+    {"Decision": "5721"} means the answer is entry 5721. Returns
+    (decision, quotes_verified), both None while the form is unanswered.
+    """
+    try:
+        arr = json.loads(blob)
+    except Exception:
+        return None, None
+    if not isinstance(arr, list):
+        return None, None
+
+    def deref(v):
+        if isinstance(v, str) and v.isdigit():
+            i = int(v)
+            if 0 <= i < len(arr) and isinstance(arr[i], str):
+                return arr[i]
+        return v if isinstance(v, str) else None
+
+    for item in arr:
+        if isinstance(item, dict) and "Decision" in item:
+            dec = deref(item["Decision"])
+            if dec in ("Approve", "Reject"):
+                return dec, deref(item.get("Quotes checked against originals"))
+    return None, None
+
+
+def _read_state_once() -> dict:
     db = snapshot_db()
     if db is None:
         return {"error": "Could not read n8n state. Is the container running?"}
@@ -83,7 +113,20 @@ def read_state() -> dict:
                 "id": eid, "workflow": name or wfid, "status": status,
                 "mode": mode, "startedAt": started, "stoppedAt": stopped,
                 "isDelivery": wfid == DELIVERY_ID, "operation": None, "detail": None,
+                "decision": None, "quotesVerified": None,
             }
+            if wfid == ANALYSIS_ID:
+                d = con.execute("select data from execution_data where executionId=?",
+                                (eid,)).fetchone()
+                if d:
+                    dec, ver = decision_of(str(d[0]))
+                    entry["decision"] = dec
+                    entry["quotesVerified"] = ver
+                    if dec == "Reject":
+                        # The whole point of the reject take: prove nothing moved.
+                        entry["detail"] = "halted at approval gate · zero external writes"
+                    elif dec == "Approve":
+                        entry["detail"] = f"approved · quotes {str(ver or '').lower()}"
             if wfid == DELIVERY_ID:
                 d = con.execute("select data from execution_data where executionId=?",
                                 (eid,)).fetchone()
@@ -142,6 +185,28 @@ def read_state() -> dict:
     }
 
 
+def read_state() -> dict:
+    """Snapshot and read, retrying a torn copy.
+
+    docker cp of a database n8n is actively writing can land mid-write and
+    come back "malformed". That is a bad snapshot, not a damaged instance,
+    so retry briefly and degrade to a message rather than killing the server.
+    """
+    last = None
+    for attempt in range(3):
+        try:
+            return _read_state_once()
+        except sqlite3.DatabaseError as e:
+            last = e
+            time.sleep(0.6 * (attempt + 1))
+        except Exception as e:
+            last = e
+            break
+    return {"n8n": n8n_up(), "executions": [], "audit": [],
+            "waitingExecutionId": None, "formUrl": None,
+            "transient": f"Could not read a clean snapshot ({last}). Retrying…"}
+
+
 def trigger_run() -> dict:
     req = urllib.request.Request(
         WEBHOOK, data=json.dumps({"source": "mcp-console"}).encode(),
@@ -170,16 +235,21 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
-        if self.path.startswith("/api/state"):
-            self._send(200, read_state())
-        elif self.path in ("/", "/index.html"):
+        route = self.path.split("?", 1)[0]  # a query string must not 404
+        if route == "/api/state" or self.path.startswith("/api/state"):
+            try:
+                self._send(200, read_state())
+            except Exception as e:
+                self._send(200, {"n8n": n8n_up(), "executions": [], "audit": [],
+                                 "transient": str(e)[:160]})
+        elif route in ("/", "/index.html"):
             html = (HERE / "mcp_console.html").read_bytes()
             self._send(200, html, "text/html; charset=utf-8")
         else:
             self._send(404, {"error": "not found"})
 
     def do_POST(self):
-        if self.path.startswith("/api/run"):
+        if self.path.split("?", 1)[0] == "/api/run":
             self._send(200, trigger_run())
         else:
             self._send(404, {"error": "not found"})
