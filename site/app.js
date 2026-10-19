@@ -323,6 +323,65 @@
   renderCanvas();
   resetDemo();
 
+  // Deliverables tabs. Content comes from the generated deliverables.js so
+  // the page always shows exactly what shipped in outputs/.
+  const dTabs = document.querySelectorAll('.deliverable-tab');
+  const dBody = document.getElementById('deliverable-body');
+  const dMeta = document.getElementById('deliverable-meta');
+  const D = window.DELIVERABLES;
+
+  if (dTabs.length && dBody && dMeta) {
+    const esc = (v) => String(v == null ? '' : v)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
+    const chip = (label, value) => `<span class="meta-chip">${esc(label)}: ${esc(value)}</span>`;
+
+    const views = {
+      pulse: () => ({
+        meta: chip('words', `${D.pulseWordCount} / 250`) + chip('sample', `${D.sampleSize} reviews`),
+        html: `<pre class="deliverable-pre">${esc(D.pulse)}</pre>`,
+      }),
+      fee: () => ({
+        meta: chip('bullets', `${D.feeBullets.length} / 6`) + chip('last checked', D.lastChecked),
+        html:
+          `<p class="deliverable-lead">${esc(D.identifiedFeeIssue)}</p>` +
+          `<ul class="deliverable-bullets">${D.feeBullets.map((b) => `<li>${esc(b)}</li>`).join('')}</ul>` +
+          `<p class="deliverable-sources">${D.sourceLinks.map((u) =>
+            `<a class="text-link" href="${esc(u)}" target="_blank" rel="noreferrer noopener">${esc(u)} \u2197</a>`
+          ).join('')}</p>`,
+      }),
+      doc: () => ({
+        meta: chip('tool', 'append_to_doc') + chip('gated by', 'human approval'),
+        html:
+          `<p class="deliverable-lead">Exact JSON appended to Google Docs by the MCP tool after approval.</p>` +
+          `<pre class="deliverable-pre deliverable-code">${esc(D.docEntry)}</pre>`,
+      }),
+      email: () => ({
+        meta: chip('tool', 'create_email_draft') + chip('sent', 'never'),
+        html:
+          `<p class="deliverable-lead"><strong>Subject:</strong> ${esc(D.emailSubject)}</p>` +
+          `<pre class="deliverable-pre">${esc(D.emailBody)}</pre>`,
+      }),
+    };
+
+    const show = (key) => {
+      const view = (views[key] || views.pulse)();
+      dMeta.innerHTML = view.meta;
+      dBody.innerHTML = view.html;
+      dTabs.forEach((t) => {
+        const on = t.dataset.tab === key;
+        t.classList.toggle('is-active', on);
+        t.setAttribute('aria-selected', String(on));
+      });
+    };
+
+    dTabs.forEach((t) => t.addEventListener('click', () => show(t.dataset.tab)));
+    show('pulse');
+  } else if (dBody) {
+    dBody.innerHTML = '<p class="deliverable-lead">Deliverables data unavailable. Run <code>python src/build_outputs.py</code>.</p>';
+  }
+
   // Mobile navigation toggle. The button exists in the markup but was
   // never wired up, so the menu could not be opened on small screens.
   const menuToggle = document.getElementById('menu-toggle');

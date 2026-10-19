@@ -105,3 +105,27 @@ def test_site_defines_every_element_id_app_js_looks_up():
     missing = [i for i in set(re.findall(r"getElementById\('([^']+)'\)", app))
                if f'id="{i}"' not in html]
     assert not missing, f"app.js references missing ids: {missing}"
+
+
+def test_site_deliverables_stay_in_sync_with_outputs():
+    """site/deliverables.js is generated; it must mirror outputs/."""
+    js = ROOT / "site" / "deliverables.js"
+    if not js.exists():
+        pytest.skip("deliverables.js not generated yet; run src/build_outputs.py")
+    raw = js.read_text(encoding="utf-8")
+    payload = json.loads(raw[raw.index("{"): raw.rindex("}") + 1])
+    entry = json.loads(read("doc_entry.json"))
+
+    assert payload["pulse"] == entry["weekly_pulse"]
+    assert payload["feeBullets"] == entry["explanation_bullets"]
+    assert payload["sourceLinks"] == entry["source_links"]
+    assert payload["topThemes"] == entry["top_themes"]
+    assert payload["pulseWordCount"] <= 250
+    assert len(payload["feeBullets"]) <= 6
+    assert payload["emailSubject"].startswith("Weekly Product Pulse + Customer Clarification")
+
+
+def test_site_loads_deliverables_before_app():
+    html = (ROOT / "site" / "index.html").read_text(encoding="utf-8")
+    assert "deliverables.js" in html
+    assert html.index("deliverables.js") < html.index("app.js")

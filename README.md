@@ -31,8 +31,11 @@ All generated artefacts live in [`outputs/`](./outputs/):
 | [`outputs/sources.md`](./outputs/sources.md) | Source list — 5 URLs, all verified reachable |
 | [`outputs/analysis_summary.json`](./outputs/analysis_summary.json) | Step 1 review-intelligence output |
 | [`data/reviews_sample.csv`](./data/reviews_sample.csv) | Reviews CSV sample (50 rows, sanitised) |
+| [`screenshots/`](./screenshots/) | Execution evidence — see the capture checklist |
 
-`doc_entry.json` and `email_draft.md` are **generated** from the two markdown documents by `src/build_outputs.py`, so the delivered artefacts cannot drift from the reviewed source.
+`doc_entry.json`, `email_draft.md` and `site/deliverables.js` are **generated** from the two markdown documents by `src/build_outputs.py`, so the delivered artefacts — and the site that displays them — cannot drift from the reviewed source.
+
+**To reproduce the execution evidence** (Google Docs entry + Gmail draft), follow [`docs/RUN_BOOK.md`](./docs/RUN_BOOK.md). It is one end-to-end run through the approval gate, with the six screenshots to capture listed in [`screenshots/README.md`](./screenshots/README.md).
 
 ---
 
@@ -130,7 +133,7 @@ python -m src.clean_reviews      # clean, dedupe, redact PII
 python -m src.sample_reviews     # stratified 1,000-row sample
 
 python src/analyze_results.py    # -> outputs/analysis_summary.json
-python src/build_outputs.py      # -> outputs/doc_entry.json, outputs/email_draft.md
+python src/build_outputs.py      # -> outputs/*, site/deliverables.js
 python -m pytest tests/ -v
 ```
 
@@ -164,7 +167,9 @@ Import both files from [`n8n/`](./n8n/). They ship with **placeholder credential
 | `data/classification_results.json` | Recorded classifier run — single source of truth for theme counts | ✅ |
 | `data/sampling_report.json` | Sampling methodology report | ✅ |
 | `n8n/*.json` | Workflow exports, placeholder credentials only | ✅ |
-| `docs/` | Architecture and classification prompt | ✅ |
+| `docs/` | Architecture, classification prompt and the run book | ✅ |
+| `screenshots/` | Execution evidence images + capture checklist | ✅ |
+| `site/deliverables.js` | Generated; mirrors `outputs/` for the site | ✅ |
 | `data/raw_reviews.csv`, `data/cleaned_reviews.csv` | Pre-redaction review text | ❌ gitignored |
 | `config/config.local.json`, `.env`, `state/` | Credentials and operational state | ❌ gitignored |
 
