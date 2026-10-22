@@ -178,15 +178,25 @@ directory `site`. Connect the repo in Render and deploy.
 [`docs/VIDEO_SCRIPT.md`](./docs/VIDEO_SCRIPT.md) has a timed shot list for a
 2:50 recording, plus setup and redaction steps.
 
-Once recorded, paste the URL into `site/config.js`:
+The walkthrough is live and embedded on the site: it records the MCP console
+(`tools/mcp_console.py`) driving the real n8n workflow — a run triggered over
+the webhook, rejected at the approval gate with zero external writes, then
+approved, with n8n's own per-node execution logs expanded as evidence.
+
+The URL lives in `site/config.js`:
 
 ```js
-window.DEMO_VIDEO_URL = "https://youtu.be/XXXXXXXXXXX";
+window.DEMO_VIDEO_URL = "https://drive.google.com/file/d/<id>/view";
 ```
 
-The page embeds it automatically — YouTube, Vimeo, or a direct `.mp4`/`.webm`/
-`.mov` over https — and drops the placeholder. Leave it empty and the
-placeholder stays.
+The page embeds it automatically — YouTube, Vimeo, Google Drive, or a direct
+`.mp4`/`.webm`/`.mov` over https — and drops the placeholder. Leave it empty
+and the placeholder stays.
+
+> Google Drive serves `/view` with `X-Frame-Options: SAMEORIGIN`, so a share
+> link cannot be framed directly. The embed rewrites it to `/preview`, which
+> can, and adds a direct link beneath for networks that block third-party
+> embeds.
 
 ---
 

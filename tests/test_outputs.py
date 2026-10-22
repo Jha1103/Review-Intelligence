@@ -140,6 +140,27 @@ def test_video_url_is_actually_read_by_the_site():
     assert "youtube-nocookie" in app, "embed should use the no-cookie host"
 
 
+def test_drive_links_are_converted_to_the_embeddable_preview_url():
+    """A Drive /view link sends X-Frame-Options: SAMEORIGIN and cannot be
+    framed; /preview can. The embed must convert, not use the raw link."""
+    app = (ROOT / "site" / "app.js").read_text(encoding="utf-8")
+    assert "drive.google.com" in app
+    assert "/preview" in app, "Drive links must be rewritten to /preview"
+
+
+def test_configured_video_url_is_a_supported_host():
+    cfg = (ROOT / "site" / "config.js").read_text(encoding="utf-8")
+    m = re.search(r'DEMO_VIDEO_URL\s*=\s*"([^"]*)"', cfg)
+    assert m, "DEMO_VIDEO_URL assignment not found"
+    url = m.group(1)
+    if not url:
+        return  # empty is valid: the placeholder shows
+    assert url.startswith("https://"), "video URL must be https"
+    ok = ("youtu" in url or "vimeo.com" in url or "drive.google.com" in url
+          or url.rsplit(".", 1)[-1].lower() in {"mp4", "webm", "mov"})
+    assert ok, f"unsupported video host: {url}"
+
+
 def test_video_embed_rejects_non_https_and_unknown_hosts():
     app = (ROOT / "site" / "app.js").read_text(encoding="utf-8")
     assert "u.protocol !== 'https:'" in app

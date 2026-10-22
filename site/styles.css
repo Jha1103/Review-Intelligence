@@ -209,3 +209,5 @@ section{padding-top:70px;padding-bottom:60px}
 .deliverable-pre::-webkit-scrollbar-thumb{background:#344040;border-radius:20px}
 @media(max-width:600px){.deliverable-panel{padding:20px}.deliverable-tab{padding:8px 14px;font-size:12px}}
 .video-placeholder-note{margin:10px 0 0;font:11px var(--mono);color:var(--warm);max-width:460px}
+
+.video-direct{margin-right:4px}

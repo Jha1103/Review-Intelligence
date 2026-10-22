@@ -347,6 +347,13 @@
         const m = u.pathname.match(/^\/(?:embed|shorts)\/([\w-]{6,20})$/);
         return m ? `https://www.youtube-nocookie.com/embed/${m[1]}` : null;
       }
+      if (host === 'drive.google.com') {
+        // Share links come as /file/d/<id>/view|preview|edit, or ?id=<id>.
+        const m = u.pathname.match(/\/file\/d\/([\w-]{10,60})/)
+          || (u.searchParams.get('id') ? [null, u.searchParams.get('id')] : null);
+        return m && /^[\w-]{10,60}$/.test(m[1])
+          ? `https://drive.google.com/file/d/${m[1]}/preview` : null;
+      }
       if (host === 'vimeo.com') {
         const m = u.pathname.match(/^\/(\d{6,12})$/);
         return m ? `https://player.vimeo.com/video/${m[1]}` : null;
@@ -372,6 +379,17 @@
       f.allowFullscreen = true;
       f.referrerPolicy = 'strict-origin-when-cross-origin';
       videoShell.replaceChildren(f);
+      // Some networks block third-party video embeds; always leave a way out.
+      const after = document.querySelector('.video-after');
+      if (after && !after.querySelector('.video-direct')) {
+        const a = document.createElement('a');
+        a.className = 'text-link video-direct';
+        a.href = rawVideoUrl;
+        a.target = '_blank';
+        a.rel = 'noreferrer noopener';
+        a.textContent = 'Open the walkthrough directly ↗';
+        after.prepend(a);
+      }
     } else {
       const ph = document.getElementById('video-placeholder');
       if (ph) {
